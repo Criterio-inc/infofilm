@@ -1,0 +1,22 @@
+{
+  "title": "The Calendar Journal: Leap Years",
+  "slug": "leap-years",
+  "language": "en",
+  "locale": "en-US",
+  "fps": 30,
+  "script": "script/script.md",
+  "estWpm": 130,
+  "lead": 24,
+  "tail": 18,
+  "tts": {"model": "eleven_v4", "format": "mp3_44100_192"},
+  "parts": {
+    "OPENING": {"kicker": "The Calendar Journal", "bed": null},
+    "PART 1 — THE PROBLEM": {"kicker": "Part 1 · The problem", "bed": null},
+    "CLOSING": {"kicker": "The Calendar Journal", "bed": null}
+  },
+  "scenes": {
+    "opening": {"intro": "theme"},
+    "closing": {"after": "ballad"}
+  },
+  "outDir": "out"
+}

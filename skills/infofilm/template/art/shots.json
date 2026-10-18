@@ -1,0 +1,24 @@
+[
+  {
+    "id": "ref-mascot",
+    "kind": "ref",
+    "ref": "none",
+    "prompt": "The mascot of an animated explainer film: a cheerful, slightly nervous everyman commuter of 1957 with a round friendly face, round black-rimmed glasses and a neat side parting, wearing a slim grey suit, white shirt, skinny navy tie and a short-brimmed grey hat with a navy band, holding a brown leather briefcase, lifting his hat politely in greeting."
+  },
+  {
+    "id": "film-S01",
+    "prompt": "The mascot stands in his gleaming retro-futurist living room beside a giant desk calendar open on a blank page, lifting his hat to the viewer; through a big picture window a monorail glides past a googie skyline."
+  },
+  {
+    "id": "film-S02",
+    "prompt": "The mascot rides a tiny chrome rocket around a smiling cartoon Sun on a looping orbit track like a fairground ride, holding on to his hat, the Earth as a small blue globe on the track ahead of him."
+  },
+  {
+    "id": "film-S03",
+    "prompt": "The mascot as a proud inventor beside a big chrome calendar machine with levers, dials and a slot that pops out one extra blank calendar page, a friendly robot assistant holding a magnifying glass over it."
+  },
+  {
+    "id": "film-S04",
+    "prompt": "The mascot tears the last page off a tall chrome wall calendar and lifts his hat goodbye, confetti and blank calendar pages fluttering around him in his retro-futurist home."
+  }
+]

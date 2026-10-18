@@ -1,0 +1,6 @@
+out/
+node_modules/
+# copies the timeline builder makes from music/ and voice/ (the originals stay tracked: they cost money)
+video/public/audio/
+video/public/music/
+.DS_Store

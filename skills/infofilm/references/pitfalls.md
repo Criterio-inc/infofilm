@@ -1,0 +1,23 @@
+# Pitfalls (each one happened at least once)
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| The style came out wrong ("why the bunkers and gas masks?") | A mood word ("dystopian", "Fallout") was read as a prop list | Show style proposals and confirm the reading; put the unwanted motifs on the never-list in `art/style.json`, the lyrics and the contract |
+| The jingle sounds like a regional dance band | A genre word like "Swedish schlager" in the Suno style | Name American 1950s idioms (doo-wop, close harmony, crooner); try **Speech mode** for spoken-sung jingles |
+| A lyric line contradicts the brief ("masks on!") | Lyrics written before the course change | Re-read every lyric against the never-list before generating |
+| Suno downloads vanish | Navigated away before the file arrived | Wait about 10 s per download; check ~/Downloads |
+| Suno file links give 403, m4a truncated | CDN links are not for scripts | Download WAV through the ⋯ menu |
+| Text typed into the wrong Suno field | Coordinate clicks on retina are unreliable | Use `find` references and focus fields through JS |
+| Beat tracker says 118 BPM for a 166 BPM song | Search range too narrow (octave error) | Keep 70–220, calibrate against a click track |
+| The narrator reads a production note aloud; the note shows up as a caption | The parser treated `<!-- … -->` as narration | The template parser skips every comment; check `script_parse.py --json` |
+| Words glued in the timeline ("majority.Remember"), a cue not found | Text-to-Dialogue joins paragraphs without spaces | `build_timeline.py` forces a word boundary at each paragraph start |
+| A scene's audio is silent after an edit | The narration is for the old text | `build_timeline.py` prints "older text"; re-narrate that scene |
+| The image model writes words ("WHOOSH", "1957", "BALLOT") | Models add text | Explicit "no text" in every prompt, plus inspecting every image |
+| The mascot has two hats | Image-to-image doubles props | Inspect; regenerate; re-measure positions laid over the picture |
+| The hat and head are cut off in the card | 16:9 image in a 2.4:1 window | Generate 21:9 with headroom |
+| The kicker wraps to two lines | A long title | The card auto-shrinks titles (about 0.74 em per Bowlby character); keep titles at most 5 words |
+| A label hides behind bars, a decimal is clipped | The plate is too narrow for the content at full size | Check the final state of every number in the sheet; plates clip with overflow hidden |
+| The fact base itself was wrong | Research from secondary summaries | An independent review against primary sources, covering the research as well as the script |
+| A date-bound phrase ("on Monday") aged within a week | Writing from the calendar | Use absolute dates, or structure that doesn't need them |
+| The disk filled up during stills | Every bundle copies `public/` | The still tools clean up on exit; check the temp folder; render to a big disk |
+| Two renders at once, both crawling or crashing | RAM and Chrome instances | One render at a time; builders render stills only |

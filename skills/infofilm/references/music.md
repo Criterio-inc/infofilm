@@ -1,0 +1,68 @@
+# Music (Suno, official web UI)
+
+Suno has no public API. Use the **official web UI** in Chrome through the claude-in-chrome tools, logged in as the user. Never use third-party API wrappers.
+
+## The cues a film needs
+| Key (cuts.json) | What | Length | Notes |
+|---|---|---|---|
+| `theme` | opening theme | about 20 s | **Speech mode** gives a deadpan bass voice in close harmony that is perfect for the newsreel. Speech settings: Script, Tone, background music on, Male. It ends with the film's name |
+| `bed-1`… | one instrumental bed per part | 2–3 min, loops | bossa/lounge for explaining, a nervous swing for drama, a stately march for procedure. Instrumental, no long intro |
+| `jingle-1`… | a sung commercial break | 20–35 s | doo-wop or close-harmony ad jingle. Its lyrics sell the system like an appliance. Speech mode a cappella works too |
+| `ballad` | the closing ballad over the credits | 60–110 s | Remix → **Cover** of the theme, slower, a crooner with strings. It ends on the mascot's catchphrase |
+
+## Prompting
+- Ask for **American 1950s** idioms by name: doo-wop, close harmony, crooner, exotica, bossa lounge, big-band swing, Hammond organ, vibraphone.
+- Avoid regional genre words that drag the music elsewhere. "Swedish schlager" gave a dance-band sound the user hated.
+- Lyrics follow the same never-list as the pictures. No "gas mask", "siren" or "bunker" lines; take them out of the lyrics before generating.
+- Keep intros short. The theme must start singing within a second.
+- Generate 2–4 takes per cue. **The user likes the keepers in Suno**, unless they have handed you the choice.
+
+## Downloading (WAV)
+1. On the take: open the **⋯ menu → Download**, choose WAV, untick M4A, then press "Unlock & Download".
+2. **Do not navigate away until the file has arrived** in ~/Downloads (about 10 s). Leaving early silently aborts the download.
+3. Suno's CDN links return 403 to scripts, and the streaming m4a can be truncated. The UI download is the reliable path.
+4. WAV downloads may count against a plan quota. Download only the keepers, and ask first.
+
+Move the files to `music/suno/<key>.wav`, and log the take id and title in `notes/log.md`.
+
+## Cut points from the aligned lyrics
+Suno's own lyric alignment gives word times. In the Suno tab, run this with the claude-in-chrome `javascript_tool`. It runs in the user's own logged-in session, and the bearer token is the `__session` cookie:
+```js
+const tok = document.cookie.split('; ').find(c => c.startsWith('__session='))?.split('=')[1];
+const r = await fetch(`https://studio-api.prod.suno.com/api/gen/${ID}/aligned_lyrics/v2/`, { headers: { Authorization: 'Bearer ' + tok } });
+const j = await r.json();
+JSON.stringify(j.aligned_words.map(w => ({ word: w.word, start_s: w.start_s, end_s: w.end_s })));
+```
+`ID` is the clip id from the song's URL. Save the result as `music/suno/<key>.aligned.json`, then run:
+```
+python3 music/tools/suno_lines.py music/suno/theme.aligned.json THEME   # → paste into video/src/lyrics.ts
+```
+It also prints `sungEnd`. Write `music/cuts.json`:
+```json
+"theme":  {"file": "suno/theme.wav",  "in": 0.0, "out": 21.4, "sungEnd": 17.6, "fade": 1.0},
+"bed-1":  {"file": "suno/bed-1.wav"},
+"jingle-1": {"file": "suno/jingle-1.wav", "in": 0.0, "out": 34.0, "sungEnd": 33.6, "fade": 0.4}
+```
+Wire the cues in film.json: `"parts": {"PART 1 — …": {"bed": "bed-1"}}` and `"scenes": {"opening": {"intro": "theme"}, "break-1": {"after": "jingle-1"}, "closing": {"after": "ballad"}}`.
+- An **intro** starts 8 frames into its scene, and the narration starts 0.4 s after `sungEnd`. The rest of the theme plays on, ducked under the voice.
+- An **after** cut starts 6 frames after the scene's speech. The scene lasts until the cut ends, and the bed steps aside while it plays.
+
+## Tempo for beat-synced animation
+```
+python3 music/tools/beats.py music/suno/jingle-1.wav        # default range 70–220 BPM
+```
+- Keep the range wide. A narrow range reads 166 BPM as 118.
+- Swing reports both the beat and its double or half, so listen and pick.
+- Check the tool against a click track of a known tempo before you trust it.
+
+The tempo and the first-beat phase go into the scene as `{ bpm, phase }` for `beatPulse` / `KineticLyrics`.
+
+## Mix (in `Music.tsx`)
+| Element | Level |
+|---|---|
+| Bed alone | 0.3 |
+| Bed under the voice | 0.055, with 10-frame ramps |
+| Jingles and ballad | 0.95; the bed fades out around them |
+| Theme under the first words | ducked to about 15 % |
+
+The master is loudness-normalised afterwards. Check the segments: theme, voice over bed, jingle and ballad should all land within about 1 LU of each other.
