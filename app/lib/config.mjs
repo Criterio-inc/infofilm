@@ -38,6 +38,26 @@ export function loadSecrets() {
   return readJson(SECRETS, {});
 }
 
+// a free call per service that tells a working key from a wrong one (no credits used)
+const KEY_CHECKS = {
+  ELEVENLABS_API_KEY: { name: "ElevenLabs", url: "https://api.elevenlabs.io/v1/user/subscription", headers: (k) => ({ "xi-api-key": k }) },
+  OPENROUTER_API_KEY: { name: "OpenRouter", url: "https://openrouter.ai/api/v1/key", headers: (k) => ({ Authorization: `Bearer ${k}` }) },
+};
+
+/** Throws a readable error when the service turns the key down; offline counts as fine. */
+export async function checkKey(k, value) {
+  const c = KEY_CHECKS[k];
+  if (!c || !value.trim()) return;
+  let res;
+  try {
+    res = await fetch(c.url, { headers: c.headers(value.trim()), signal: AbortSignal.timeout(10000) });
+  } catch {
+    return; // no network: save it, the first real call will tell
+  }
+  if (res.status === 401 || res.status === 403)
+    throw Object.assign(new Error(`${c.name} godtar inte nyckeln (${res.status}). Kontrollera att du kopierat hela nyckeln${k === "ELEVENLABS_API_KEY" ? ", den börjar med sk_" : ""}. Inget sparades.`), { status: 400 });
+}
+
 export function saveSecrets(patch) {
   mkdirSync(HOME_DIR, { recursive: true });
   const cur = loadSecrets();
@@ -63,6 +83,9 @@ export function toolEnv(extra = {}) {
   if (c.profilesPath) env.INFOFILM_PROFILES = c.profilesPath;
   if (c.browserExecutable) env.BROWSER_EXECUTABLE = c.browserExecutable;
   env.FORCE_COLOR = "0";
+  // plain text in the app's log: Python 3.13+ colours its tracebacks otherwise
+  env.NO_COLOR = "1";
+  env.PYTHON_COLORS = "0";
   for (const [k, v] of Object.entries(env)) if (v === "") delete env[k]; // "" in extra = remove
   return env;
 }

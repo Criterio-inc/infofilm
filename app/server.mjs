@@ -6,7 +6,7 @@ import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } f
 import http from "node:http";
 import path from "node:path";
 import { createProject, PRESETS, reveal, runAction, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
-import { APP_DIR, KEYS, SKILL_DIR, loadConfig, loadSecrets, saveConfig, saveSecrets, toolEnv } from "./lib/config.mjs";
+import { APP_DIR, KEYS, SKILL_DIR, checkKey, loadConfig, loadSecrets, saveConfig, saveSecrets, toolEnv } from "./lib/config.mjs";
 import { getJob, projectJobs, runningJob, stopAll, stopJob, summary as jobSummary } from "./lib/jobs.mjs";
 import { detail, listProfiles, listProjects, projectDir, saveApp } from "./lib/projects.mjs";
 import { createProfile, jobKey, ownRoot, previewProfile, profileClaude, profileFile, profilePrompt, readProfile, syncPrompt, removeFile, saveProfile, upload, voiceToProfile } from "./lib/profiles.mjs";
@@ -202,6 +202,8 @@ async function api(req, res, url) {
   }
   if (m === "POST" && parts[0] === "settings") {
     const b = await body(req);
+    // a key the service turns down is never saved (it would win over a working one from the environment)
+    for (const k of KEYS) if (typeof b.keys?.[k] === "string") await checkKey(k, b.keys[k]);
     saveConfig(b);
     if (b.keys) saveSecrets(b.keys);
     checks = null;
