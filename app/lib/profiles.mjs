@@ -6,7 +6,7 @@ import path from "node:path";
 import { claudeStep } from "./claude.mjs";
 import { HOME_DIR, SKILL_DIR, loadConfig } from "./config.mjs";
 import { startJob } from "./jobs.mjs";
-import { SAFE_ID, designLinks, listProfiles } from "./projects.mjs";
+import { SAFE_ID, defaultLoop, designLinks, listProfiles, musicLoops } from "./projects.mjs";
 
 const PREVIEW = path.join(HOME_DIR, "preview");
 const readJson = (f, fb = null) => {
@@ -74,6 +74,8 @@ export function readProfile(id) {
     material: files(d, "material").filter((f) => f.name !== "LINKS.md"),
     fonts: files(d, "fonts").filter((f) => /\.(woff2?|ttf|otf)$/i.test(f.name)),
     images: files(d, "img"),
+    loops: musicLoops(path.join(d, "music"), { profile: true }).map((m) => ({ ...m, path: `music/${m.file}` })),
+    loop: defaultLoop(prof, musicLoops(path.join(d, "music"), { profile: true })),
     stills,
     claudeSession: app.claudeSession || null,
     claudeLast: app.claudeLast || null,
@@ -115,6 +117,18 @@ export function saveProfile(id, b) {
     if (b.voice && b.voice.voice_id) writeJson(f, { ...readJson(f, {}), ...b.voice });
     else rmSync(f, { force: true });
   }
+  if (b.music) {
+    // the default loop ("" = no music in new films) and the loops' names
+    const f = path.join(d, "profile.json");
+    const cur = readJson(f, {});
+    if ("loop" in b.music) writeJson(f, { ...cur, music: { ...(cur.music || {}), bed: b.music.loop || null } });
+    if (b.music.labels) {
+      const cf = path.join(d, "music/cuts.json");
+      const cuts = readJson(cf, {});
+      for (const [k, label] of Object.entries(b.music.labels)) if (cuts[k]) cuts[k].label = String(label).slice(0, 40) || k;
+      writeJson(cf, cuts);
+    }
+  }
   if (typeof b.notes === "string") writeFileSync(path.join(d, "NOTES.md"), b.notes);
   if (typeof b.links === "string") {
     mkdirSync(path.join(d, "material"), { recursive: true });
@@ -123,7 +137,7 @@ export function saveProfile(id, b) {
   return { fontsChanged };
 }
 
-const KINDS = { material: "material", logo: ".", font: "fonts", image: "img" };
+const KINDS = { material: "material", logo: ".", font: "fonts", image: "img", music: "music" };
 
 /** A file from the page (base64). Logos land next to profile.json, fonts in fonts/, the rest in material/. */
 export function upload(id, { kind, name, data }) {
@@ -136,11 +150,21 @@ export function upload(id, { kind, name, data }) {
   if (!safe) throw err("filen saknar namn");
   if (kind === "logo" && !/\.(svg|png)$/i.test(safe)) throw err("loggan ska vara SVG eller PNG");
   if (kind === "font" && !/\.(woff2|woff|ttf|otf)$/i.test(safe)) throw err("typsnitt ska vara woff2, woff, ttf eller otf");
+  if (kind === "music" && !/\.(wav|mp3|m4a|aiff?|flac)$/i.test(safe)) throw err("musiken ska vara WAV, MP3, M4A, AIFF eller FLAC");
   const d = writableDir(id);
   const dir = path.join(d, KINDS[kind]);
   mkdirSync(dir, { recursive: true });
   const fileName = kind === "logo" ? `logo${path.extname(safe).toLowerCase()}` : safe;
   writeFileSync(path.join(dir, fileName), Buffer.from(String(data || ""), "base64"));
+  if (kind === "music") {
+    // a new background loop: its key is bed-<name>, its label the file's name; films find it in music/suno/
+    const cf = path.join(dir, "cuts.json");
+    const cuts = readJson(cf, {});
+    const stem = path.parse(fileName).name;
+    const key = "bed-" + stem.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    cuts[key] = { file: `suno/${fileName}`, label: stem.replace(/[-_]+/g, " ") };
+    writeJson(cf, cuts);
+  }
   if (kind === "logo") {
     const f = path.join(d, "profile.json");
     const cur = readJson(f, {});
@@ -150,8 +174,16 @@ export function upload(id, { kind, name, data }) {
 }
 
 export function removeFile(id, rel) {
-  if (!/^(material|img|fonts)\/[^/]+$/.test(rel || "") || rel.includes("..")) throw err("kan inte ta bort den filen");
-  rmSync(path.join(writableDir(id), rel), { force: true });
+  if (!/^(material|img|fonts|music)\/[^/]+$/.test(rel || "") || rel.includes("..") || rel === "music/cuts.json") throw err("kan inte ta bort den filen");
+  const d = writableDir(id);
+  rmSync(path.join(d, rel), { force: true });
+  if (rel.startsWith("music/")) {
+    // the loop goes from cuts.json too, and stops being the default
+    const cf = path.join(d, "music/cuts.json");
+    const cuts = readJson(cf, {});
+    for (const [k, c] of Object.entries(cuts)) if (c?.file && path.basename(c.file) === path.basename(rel)) delete cuts[k];
+    writeJson(cf, cuts);
+  }
 }
 
 /** A new profile from _mall, in the own profiles folder. */
@@ -246,7 +278,7 @@ export function profileFile(id, rel) {
     if (!/^out\/stills-[^/]+\/review\/[^/]+_review\.jpg$/.test(r)) throw err("inte tillåtet", 403);
     return path.join(PREVIEW, r);
   }
-  if (!/^(logo\.(svg|png)|img\/[^/]+|material\/[^/]+)$/.test(rel) || rel.includes("..")) throw err("inte tillåtet", 403);
+  if (!/^(logo\.(svg|png)|img\/[^/]+|material\/[^/]+|music\/[^/]+\.(wav|mp3|m4a|aiff?|flac))$/i.test(rel) || rel.includes("..")) throw err("inte tillåtet", 403);
   return path.join(find(id).dir, rel);
 }
 

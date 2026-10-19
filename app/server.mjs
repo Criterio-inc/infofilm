@@ -15,8 +15,8 @@ import { startJob } from "./lib/jobs.mjs";
 const PORT = Number(process.env.INFOFILM_PORT || loadConfig().port || 4747);
 const PUBLIC = path.join(APP_DIR, "public");
 // files of a project the page may load: renders, stills, illustrations, narration, voice takes
-const SERVABLE = [/^out\/[^/]+\.(mp4|srt)$/, /^out\/preview\/preview\.mp4$/, /^out\/stills-[^/]+\/review\/[^/]+_review\.jpg$/, /^video\/public\/img\/[^/]+\.jpg$/, /^video\/public\/audio\/[^/]+\.mp3$/, /^voice\/previews\/[^/]+\.mp3$/];
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".mp4": "video/mp4", ".mp3": "audio/mpeg", ".srt": "text/plain; charset=utf-8", ".json": "application/json" };
+const SERVABLE = [/^out\/[^/]+\.(mp4|srt)$/, /^out\/preview\/preview\.mp4$/, /^music\/suno\/[^/]+\.(wav|mp3|m4a|aiff?|flac)$/i, /^out\/stills-[^/]+\/review\/[^/]+_review\.jpg$/, /^video\/public\/img\/[^/]+\.jpg$/, /^video\/public\/audio\/[^/]+\.mp3$/, /^voice\/previews\/[^/]+\.mp3$/];
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".mp4": "video/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".aif": "audio/aiff", ".aiff": "audio/aiff", ".flac": "audio/flac", ".srt": "text/plain; charset=utf-8", ".json": "application/json" };
 
 // ── checks: what the computer has, cached for a minute ──
 let checks = null;

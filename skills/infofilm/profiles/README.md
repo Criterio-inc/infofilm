@@ -90,4 +90,10 @@ Then set `name`, `syncedAt` (the date) and `file` (the snapshot) on each link, w
 |---|---|---|
 | `img/ref-*.png` | `art/img/` | A recurring character's reference image. Set `"reference": "img/ref-….png"` in `style.json`. |
 | `voice.json` | `voice/voice.json` | The client's saved narrator, so there is no new voice design for each film. |
-| `music/*.wav` + `music/cuts.json` | `music/suno/` + `music/cuts.json` | The client's sound. The keys are wired by mode: **klipp**: `sting` (a sound logo of 2–5 s before the first word), `bed` (a loop under the speech), `outro` (after the end card). **film**: `theme`, `bed`, `jingle`, `ballad`. A key without a file is simply skipped. |
+| `music/*.wav` (or mp3) + `music/cuts.json` | `music/suno/` + `music/cuts.json` | The client's sound. The keys are wired by mode: **klipp**: `sting` (a sound logo of 2–5 s before the first word), `bed` (a loop under the speech), `outro` (after the end card). **film**: `theme`, `bed`, `jingle`, `ballad`. A key without a file is simply skipped. |
+
+### Background loops: one, several or none
+A client can keep several background loops for different moods, each a key that starts with `bed` and has a `label`: `"bed-lugn": {"file": "suno/bed-lugn.wav", "label": "Lugn"}`. The loop plays at 30 % in pauses and 5.5 % under the voice (`video/src/Music.tsx`).
+- `profile.json` `"music": {"bed": "bed-lugn"}` is the loop new films get; `"bed": null` means no music by default. Without the setting, a key `bed` is used if it exists.
+- A film chooses for itself: `new_film.sh --music bed-lugn` or `--music none`, or later in `film.json` (`parts[…].bed`, `""` for none). In the app: **Kunder → Musik** for the loops and the default, the new-film guide and **Titta igenom** for each film.
+- Choose by what the film should convey: a calm loop for explaining, none for a serious or sensitive message, or when the voice must carry it alone.

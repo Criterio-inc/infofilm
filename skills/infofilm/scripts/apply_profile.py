@@ -3,15 +3,17 @@
 
   apply_profile.py <profile-dir> <project-dir> [--mode klipp|film] [--formats 16:9,1:1]
                    [--slug s] [--title t] [--lang xx] [--locale xx-XX] [--design-systems url,url]
+                   [--music bed-lugn|none]
 
   profile.json, logo, fonts/, NOTES.md → brand/          (what the video reads)
   style.json                         → art/style.json  (the look of the illustrations)
   img/*                              → art/img/        (a recurring character's reference image)
   design.json, voice.json            → voice/          (the narrator: design brief, saved voice id)
-  music/*.wav + music/cuts.json      → music/suno/ + music/cuts.json (theme, bed, sting, outro …)
+  music/*.wav|mp3 + music/cuts.json  → music/suno/ + music/cuts.json (theme, bed, sting, outro …)
 film.json gets the slug, title, language, locale, mode and formats (and this film's own design-system
 links, on top of the profile's), and its parts and scene hooks
-are wired to the profile's music keys: a key without a file is simply skipped.
+are wired to the profile's music keys: a key without a file is simply skipped. The background loop
+(a "bed" key) is the profile's "music.bed", or --music; --music none gives a film without one.
 """
 import argparse
 import json
@@ -20,13 +22,14 @@ import sys
 from pathlib import Path
 
 TO_BRAND_SKIP = {"style.json", "design.json", "voice.json", "img", "music"}
+AUDIO = {".wav", ".mp3", ".m4a", ".aif", ".aiff", ".flac"}
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("profile")
     ap.add_argument("project")
-    for k in ("mode", "formats", "slug", "title", "lang", "locale", "design-systems"):
+    for k in ("mode", "formats", "slug", "title", "lang", "locale", "design-systems", "music"):
         ap.add_argument(f"--{k}", default="")
     a = ap.parse_args()
     prof_dir, proj = Path(a.profile).resolve(), Path(a.project).resolve()
@@ -45,8 +48,9 @@ def main():
     cuts_path = proj / "music/cuts.json"
     cuts = json.loads(cuts_path.read_text(encoding="utf-8"))
     if (prof_dir / "music").is_dir():
-        for wav in (prof_dir / "music").glob("*.wav"):
-            shutil.copy2(wav, proj / "music/suno" / wav.name)
+        for wav in (prof_dir / "music").iterdir():
+            if wav.suffix.lower() in AUDIO:
+                shutil.copy2(wav, proj / "music/suno" / wav.name)
         if (prof_dir / "music/cuts.json").exists():
             cuts.update(json.loads((prof_dir / "music/cuts.json").read_text(encoding="utf-8")))
     cuts_path.write_text(json.dumps(cuts, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -71,14 +75,18 @@ def main():
     if links:
         known = {d["url"] for d in film.get("designSystems", [])}
         film["designSystems"] = film.get("designSystems", []) + [{"url": u} for u in links if u not in known]
+    # the background loop: --music (a key, or "none"), else the profile's choice ("music": {"bed": …}, null = none)
+    pm = prof.get("music") or {}
+    bed = "" if a.music == "none" else a.music or (pm.get("bed") or "" if "bed" in pm else "bed")
     if not wire:
-        pass
+        if a.music:
+            film["parts"] = {p: {**v, "bed": bed} for p, v in film.get("parts", {}).items()}
     elif mode == "klipp":
         # one part, a short sting before the first word, the bed under it all, an outro on the end card
-        film["parts"] = {"KLIPP": {"kicker": kicker, "bed": "bed"}}
+        film["parts"] = {"KLIPP": {"kicker": kicker, "bed": bed}}
         film["scenes"] = {"the-year": {"intro": "sting"}, "end-card": {"after": "outro"}}
     else:
-        film["parts"] = {p: {**v, "kicker": kicker if p in ("OPENING", "CLOSING") else v.get("kicker", ""), "bed": v.get("bed") or "bed"}
+        film["parts"] = {p: {**v, "kicker": kicker if p in ("OPENING", "CLOSING") else v.get("kicker", ""), "bed": bed if a.music else v.get("bed") or bed}
                          for p, v in film.get("parts", {}).items()}
     film_path.write_text(json.dumps(film, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"profile {prof_dir.name} ({prof.get('name', '?')}) → {proj}: {mode}, {', '.join(formats)}")

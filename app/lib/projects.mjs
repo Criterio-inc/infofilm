@@ -23,6 +23,22 @@ const readJson = (f, fallback = null) => {
 
 export const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
+/** The background loops in a music folder: cuts.json keys that start with "bed" and whose file exists.
+ * In a profile the files lie next to cuts.json; in a film they lie in music/suno/ (as cuts.json says). */
+export function musicLoops(musicDir, { profile = false } = {}) {
+  const cuts = readJson(path.join(musicDir, "cuts.json"), {}) || {};
+  return Object.entries(cuts)
+    .filter(([k, c]) => /^bed/.test(k) && c?.file)
+    .map(([key, c]) => ({ key, label: c.label || key, file: profile ? path.basename(c.file) : c.file }))
+    .filter((m) => existsSync(path.join(musicDir, m.file)));
+}
+
+/** A profile's default loop: "music": {"bed": key} (null = no music); without the setting, "bed" if it exists. */
+export const defaultLoop = (prof, loops) => {
+  if (prof?.music && "bed" in prof.music) return loops.some((l) => l.key === prof.music.bed) ? prof.music.bed : "";
+  return loops.some((l) => l.key === "bed") ? "bed" : "";
+};
+
 /** Design systems (Claude Design, the web, or a folder on this computer), from a textarea or a list,
  * as [{ url, name?, syncedAt?, file? }]: url is a link (https://…) or a folder (~/… or /…).
  * What is already known about one (its name, when it was synced, its snapshot) is kept. */
@@ -66,6 +82,10 @@ export function listProfiles() {
         palette: { band: p.palette?.band, primary: p.palette?.primary, accent: p.palette?.accent, surface: p.palette?.surfaceLight, backdrop: p.palette?.backdrop },
         placeholder: /PLACEHOLDER/i.test(p._doc || ""),
         designSystems: (p.designSystems || []).length,
+        ...(() => {
+          const loops = musicLoops(path.join(root, name, "music"), { profile: true });
+          return { loops: loops.map(({ key, label }) => ({ key, label })), loop: defaultLoop(p, loops) };
+        })(),
       });
     }
   }
@@ -212,6 +232,20 @@ export function detail(id) {
     },
     shots: (readJson(path.join(dir, "art/shots.json"), []) || []).length,
     shotList: (readJson(path.join(dir, "art/shots.json"), []) || []).map((x) => ({ id: x.id, prompt: x.prompt })),
+    music: {
+      // the film's own loops, plus the client's that the film does not have yet (copied in when chosen)
+      loops: (() => {
+        const own = musicLoops(path.join(dir, "music")).map((m) => ({ ...m, src: `music/${m.file}` }));
+        let fromProfile = [];
+        try {
+          fromProfile = musicLoops(path.join(profileDir(s.profile), "music"), { profile: true }).filter((m) => !own.some((o) => o.key === m.key)).map(({ key, label }) => ({ key, label, src: null }));
+        } catch {
+          /* the film's profile is gone: its own loops are enough */
+        }
+        return [...own, ...fromProfile];
+      })(),
+      bed: Object.values(readJson(path.join(dir, "film.json"), {}).parts || {}).map((x) => x.bed).find((b) => b) || "",
+    },
     claudeSession: app.claudeSession || null,
     claudeLast: app.claudeLast || null,
   };

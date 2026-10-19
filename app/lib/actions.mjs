@@ -2,7 +2,7 @@
 // Paid steps (voice, images) only run after the page has shown the dry-run and the user approved;
 // the approval and the estimate go into notes/log.md, as the skill requires.
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { SKILL_DIR, toolEnv } from "./config.mjs";
@@ -89,6 +89,27 @@ export function runAction(id, action, args = {}) {
       });
     }
 
+    case "music": {
+      // the background loop for the whole film: a key from music/cuts.json, or "" for none
+      const key = String(args.key || "");
+      const cf = path.join(dir, "music/cuts.json");
+      const cuts = JSON.parse(readFileSync(cf, "utf8"));
+      if (key && !(key in cuts && existsSync(path.join(dir, "music", cuts[key].file)))) {
+        // a loop the client got after this film was made: copy it in from the profile
+        const pm = path.join(profileDir(film.profile), "music");
+        const pc = JSON.parse(readFileSync(path.join(pm, "cuts.json"), "utf8"))[key];
+        if (!pc || !existsSync(path.join(pm, path.basename(pc.file)))) throw Object.assign(new Error("den slingan finns inte hos kunden"), { status: 400 });
+        mkdirSync(path.join(dir, "music/suno"), { recursive: true });
+        copyFileSync(path.join(pm, path.basename(pc.file)), path.join(dir, "music/suno", path.basename(pc.file)));
+        cuts[key] = { ...pc, file: `suno/${path.basename(pc.file)}` };
+        writeFileSync(cf, JSON.stringify(cuts, null, 2) + "\n");
+      }
+      film.parts = Object.fromEntries(Object.entries(film.parts || {}).map(([k, v]) => [k, { ...v, bed: key }]));
+      writeFileSync(path.join(dir, "film.json"), JSON.stringify(film, null, 2) + "\n");
+      logLine(id, `bakgrundsmusik i appen: ${key ? cuts[key].label || key : "ingen"}`);
+      return startJob(id, key ? "Musik: byt slinga" : "Musik: ingen", [build(dir)]);
+    }
+
     case "preview": {
       // a quick look at the whole film: the main format at half size, no loudness pass (free, a minute or two)
       const out = path.join(dir, "out", "preview");
@@ -129,6 +150,8 @@ export function createProject(b) {
   const designSystems = designLinks(b.designSystems);
   const args = [path.join(SKILL_DIR, "scripts/new_film.sh"), dir, "--profile", profileDir(b.profile || "critero"), "--mode", b.mode === "film" ? "film" : "klipp", "--slug", slug, "--title", String(b.title || slug)];
   if (formats.length) args.push("--format", formats.join(","));
+  // the background loop: a key from the profile, or "none"; empty = the profile's own default
+  if (typeof b.music === "string" && /^(none|bed[A-Za-z0-9._-]*)$/.test(b.music)) args.push("--music", b.music);
   const steps = [
     { label: "Nytt projekt från mallen", cmd: "bash", args, cwd: SKILL_DIR, parse: (l) => (/npm notice/.test(l) ? null : l) },
     {

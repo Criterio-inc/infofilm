@@ -77,7 +77,7 @@ Work through these phases in order. The ⛔ steps are gates: stop and get the us
 Edit a scene later and only that scene is billed again. Details and pitfalls: [references/voice.md](references/voice.md).
 
 ### 5 · Music (Suno, official web UI, via Chrome)
-Reuse the profile's music when it has any: `new_film.sh` has already copied it in and wired it. A **klipp** needs at most a `sting` (a sound logo of 2–5 s), a `bed` and an `outro`. Make them once per client and store them in the profile's `music/` with its `cuts.json`.
+Reuse the profile's music when it has any: `new_film.sh` has already copied it in and wired it. Background music is a choice per film: the profile's default loop, another of its loops, or none (`--music`, see profiles/README.md "Background loops"); match it to the client and to what the film should convey. A **klipp** needs at most a `sting` (a sound logo of 2–5 s), a `bed` and an `outro`. Make them once per client and store them in the profile's `music/` with its `cuts.json`.
 
 A newsreel **film** needs these cues:
 - an opening **theme** of about 20 s, which works brilliantly in Speech mode as a deadpan close-harmony voice

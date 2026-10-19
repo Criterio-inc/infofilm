@@ -153,6 +153,7 @@ function newPage() {
           <div><label>Syfte <span class="hint">– det tittaren ska ta med sig</span></label><input type="text" name="purpose"></div>
         </div>
         <label>Underlag <span class="hint">– länkar, siffror, källor, vad som måste med eller inte får sägas</span></label><textarea name="notes"></textarea>
+        <label>Bakgrundsmusik <span class="hint">– en lugn slinga lågt under rösten, eller ingen</span></label><select name="music" id="musicsel"></select>
         <label>Designsystem <span class="hint">– valfritt: länkar eller mappar för just den här filmen, utöver kundens (en per rad). Claude läser dem före manus, bildprompter och scener.</span></label><textarea name="designSystems" rows="2" placeholder="https://claude.ai/…"></textarea>
       </div>
       <label class="row" style="font-weight:400"><input type="checkbox" name="startClaude" checked> Låt Claude börja direkt med research och manus (kostar inget extra utöver ditt Claude-abonnemang)</label>
@@ -167,6 +168,9 @@ function newPage() {
   const prof = () => {
     const p = state.profiles.find((x) => x.id === f.profile.value);
     const ds = p?.designSystems ? ` · ${p.designSystems === 1 ? "ett länkat designsystem" : `${p.designSystems} länkade designsystem`}` : "";
+    const loops = p?.loops || [];
+    $("#musicsel").innerHTML = [["none", "Ingen bakgrundsmusik"], ...loops.map((m) => [m.key, `Slingan ${m.label}`])].map(([v, l]) => `<option value="${esc(v)}" ${v === (p?.loop || "none") ? "selected" : ""}>${esc(l)}</option>`).join("")
+      + (loops.length ? "" : `<option disabled>Kunden har inga slingor än – lägg till under Kunder</option>`);
     $("#profinfo").innerHTML = p ? `${swatch(p.palette)} ${p.placeholder ? `<span class="warn">Profilen har platshållare för färger och logga – fyll i den innan filmen ska ut.</span>` : esc(p.language || "")}${ds}` : "";
   };
   f.addEventListener("change", (e) => {
@@ -358,6 +362,10 @@ async function projectPage(id) {
       card.title = "Filmen är godkänd";
       card.main = goNext;
     }
+    const ms = p.music || { loops: [], bed: "" }; // an older server sends no music
+    card.more = `<div class="row"><label style="margin:0">Bakgrundsmusik</label><select id="bedsel" style="width:auto" ${busy ? "disabled" : ""}>${[["", "Ingen"], ...ms.loops.map((m) => [m.key, `Slingan ${m.label}`])].map(([v, l]) => `<option value="${esc(v)}" ${v === ms.bed ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
+      ${ms.loops.find((m) => m.key === ms.bed && m.src) ? `<audio controls preload="none" src="${fileUrl(id, ms.loops.find((m) => m.key === ms.bed && m.src).src)}" style="flex:1;min-width:200px"></audio>` : ""}
+      ${ms.loops.length ? "" : `<span class="small muted">Kunden har inga slingor än. Lägg till under Kunder → ${esc(p.profileName)} → Musik.</span>`}</div>`;
     if (p.preview) card.body = `<video id="previewvid" controls preload="metadata" src="${fileUrl(id, p.preview.path, p.preview.mtime)}"></video>`;
   }
 
@@ -435,6 +443,7 @@ async function projectPage(id) {
     reload();
     window.scrollTo({ top: 0 });
   }));
+  $("#bedsel")?.addEventListener("change", (e) => act("music", { key: e.target.value }));
   app.querySelector("[data-play]")?.addEventListener("click", async () => {
     viewStep[id] = "review";
     await reload();
@@ -708,7 +717,16 @@ async function customerPage(id) {
           </div>
 
           <div class="section">
-            <h2>7 · Tonalitet och regler</h2>
+            <h2>7 · Musik</h2>
+            <p class="small muted">Slingor som kan ligga i bakgrunden, lågt under rösten. Varje film väljer en eller ingen. Gör dem i Suno (instrumentala, 2–3 minuter, utan lång intro), eller be Claude Code göra dem åt dig.</p>
+            ${(k.loops ||= []).length ? `<div class="stack" style="margin-top:8px">${k.loops.map((m) => `<div class="row"><input type="text" name="ml_${esc(m.key)}" value="${esc(m.label)}" style="width:150px" aria-label="Namn på slingan"><audio controls preload="none" src="${pfileUrl(id, m.path)}" style="flex:1;min-width:200px"></audio><button type="button" class="link danger small" data-rm="${esc(m.path)}">ta bort</button></div>`).join("")}</div>` : ""}
+            <div class="row" style="margin-top:8px"><label class="btn" style="margin:0">Lägg till en slinga (WAV/MP3)<input type="file" id="musicf" accept=".wav,.mp3,.m4a,.aif,.aiff,.flac" multiple hidden></label></div>
+            <label>Nya filmer får <span class="hint">– går att ändra per film</span></label>
+            ${sel("music_default", k.loop || "", [["", "Ingen bakgrundsmusik"], ...k.loops.map((m) => [m.key, `Slingan ${m.label}`])])}
+          </div>
+
+          <div class="section">
+            <h2>8 · Tonalitet och regler</h2>
             <p class="small muted">NOTES.md – Claude läser den före varje manus och bildprompt.</p>
             <textarea name="notes" rows="12" class="mono">${esc(k.notes)}</textarea>
           </div>
@@ -758,6 +776,7 @@ async function customerPage(id) {
   $("#mat").addEventListener("change", (e) => send([...e.target.files], "material"));
   $("#logo").addEventListener("change", (e) => send([...e.target.files], "logo"));
   $("#fontf").addEventListener("change", (e) => send([...e.target.files], "font"));
+  $("#musicf").addEventListener("change", (e) => send([...e.target.files], "music"));
   const drop = $("#drop");
   drop.addEventListener("dragover", (e) => (e.preventDefault(), drop.classList.add("over")));
   drop.addEventListener("dragleave", () => drop.classList.remove("over"));
@@ -797,6 +816,7 @@ async function customerPage(id) {
       voice: v("v_id").trim() ? { voice_id: v("v_id").trim(), name: v("v_name") || "Berättare" } : null,
       notes: v("notes"),
       links: v("links"),
+      music: { loop: v("music_default"), labels: Object.fromEntries(k.loops.map((m) => [m.key, v(`ml_${m.key}`)])) },
     };
     if (!body.profile.formats.length) return toast("Välj minst ett standardformat");
     try {
