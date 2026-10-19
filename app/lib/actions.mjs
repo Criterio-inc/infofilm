@@ -200,6 +200,11 @@ export const PRESETS = {
     prompt:
       "Gör fas 7 och följ de länkade designsystemen: ta bort demoscenerna (TheYear, TheRule) och bygg filmens scener, de bärande först. Lägg siffror i data.ts med källa. Lägg ut scenerna efter WIN och WIDE så att de fungerar i alla format i film.json, och kontrollera stillbilder i varje format. Kör lint_cues och tsc. Avsluta med en rad per scen om vad som syns.",
   },
+  music: {
+    label: "Musikprompt",
+    prompt:
+      "Skriv en prompt till Suno för bakgrundsmusiken till den här filmen. Läs notes/brief.md, script/script.md, brand/NOTES.md (tonalitet, bildspråk och avsnittet Musik om det finns), film.json och de länkade designsystemen. Filmens längd i sekunder är durationInFrames delat med fps i video/src/timeline/master.json. Musiken ska ligga lågt under en berättarröst: instrumental, jämn, utan dramatiska höjningar, drops eller långt intro, och den ska gå att loopa. Anpassa stämning, tempo i BPM, instrument och energi efter filmens budskap, målgrupp och avsändare. Skriv JSON till music/suno-prompt.json med fälten title (kort, på svenska), styles (på engelska, kommaseparerade, högst 900 tecken), exclude (på engelska, kommaseparerade: alltid vocals och choir, plus det som skulle störa just den här filmen), lengthSeconds (filmens längd plus 10, avrundat), instrumental (true) och why (på svenska, en eller två meningar om varför musiken passar filmen). Ändra inget annat i projektet och kör inga betalda steg. Avsluta med en mening om stämningen du valde.",
+  },
   review: {
     label: "Granska scenerna",
     prompt:

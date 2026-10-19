@@ -252,6 +252,11 @@ export function detail(id) {
       design: readJson(path.join(dir, "voice/design.json"), {}),
     },
     shots: (readJson(path.join(dir, "art/shots.json"), []) || []).length,
+    sunoPrompt: (() => {
+      const f = path.join(dir, "music/suno-prompt.json");
+      const j = readJson(f, null);
+      return j && j.styles ? { ...j, at: statSync(f).mtimeMs } : null;
+    })(),
     shotList: (readJson(path.join(dir, "art/shots.json"), []) || []).map((x) => ({ id: x.id, prompt: x.prompt })),
     music: {
       // the film's own loops, plus the client's that the film does not have yet (copied in when chosen)
