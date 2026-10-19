@@ -14,8 +14,10 @@ export const SceneShell: React.FC<{ scene: SceneData; children: React.ReactNode 
       </Sequence>
     )}
     <Audio src={staticFile(SFX.whoosh)} volume={0.18} />
-    <Sequence from={scene.durationInFrames - EXIT} layout="none">
-      <Audio src={staticFile(SFX.whoosh)} volume={0.12} />
-    </Sequence>
+    {!scene.last && (
+      <Sequence from={scene.durationInFrames - EXIT} layout="none">
+        <Audio src={staticFile(SFX.whoosh)} volume={0.12} />
+      </Sequence>
+    )}
   </AbsoluteFill>
 );

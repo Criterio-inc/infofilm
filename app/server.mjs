@@ -93,12 +93,20 @@ const json = (res, code, body) => {
 };
 const body = (req, max = 2e6) =>
   new Promise((resolve, reject) => {
-    let b = "";
+    // collect bytes, not strings: a chunk boundary may fall inside å, ä or ö
+    const parts = [];
+    let size = 0;
     req.on("data", (d) => {
-      b += d;
-      if (b.length > max) reject(Object.assign(new Error("för stor fil (högst 60 MB)"), { status: 413 }));
+      size += d.length;
+      if (size > max) {
+        reject(Object.assign(new Error("för stor fil (högst 60 MB)"), { status: 413 }));
+        req.destroy();
+        return;
+      }
+      parts.push(d);
     });
     req.on("end", () => {
+      const b = Buffer.concat(parts).toString("utf8");
       try {
         resolve(b ? JSON.parse(b) : {});
       } catch {
@@ -108,22 +116,28 @@ const body = (req, max = 2e6) =>
   });
 
 /** Serve a file with Range support (video and audio need it to seek). */
-function sendFile(req, res, file) {
+function sendFile(req, res, file, { untrusted = false } = {}) {
   const st = statSync(file);
+  if (!st.isFile()) return json(res, 404, { error: "finns inte" });
+  // files that came from outside (client material, logos, renders) never run as pages in the app's origin
+  if (untrusted) {
+    res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+  }
   const type = TYPES[path.extname(file).toLowerCase()] || "application/octet-stream";
   const range = /bytes=(\d*)-(\d*)/.exec(req.headers.range || "");
   if (range) {
-    const start = range[1] ? Number(range[1]) : st.size - Number(range[2]);
+    const start = range[1] ? Number(range[1]) : Math.max(0, st.size - Number(range[2]));
     const end = range[1] && range[2] ? Math.min(Number(range[2]), st.size - 1) : st.size - 1;
     if (start >= st.size || start > end) {
       res.writeHead(416, { "Content-Range": `bytes */${st.size}` });
       return res.end();
     }
     res.writeHead(206, { "Content-Type": type, "Content-Range": `bytes ${start}-${end}/${st.size}`, "Accept-Ranges": "bytes", "Content-Length": end - start + 1, "Cache-Control": "no-cache" });
-    return createReadStream(file, { start, end }).pipe(res);
+    return createReadStream(file, { start, end }).on("error", () => res.destroy()).pipe(res);
   }
   res.writeHead(200, { "Content-Type": type, "Content-Length": st.size, "Accept-Ranges": "bytes", "Cache-Control": "no-cache" });
-  createReadStream(file).pipe(res);
+  createReadStream(file).on("error", () => res.destroy()).pipe(res);
 }
 
 // ── routes ──
@@ -328,7 +342,7 @@ const server = http.createServer(async (req, res) => {
       const [, , id, ...rest] = url.pathname.split("/");
       const file = profileFile(decodeURIComponent(id), decodeURIComponent(rest.join("/")));
       if (!existsSync(file)) return json(res, 404, { error: "finns inte" });
-      return sendFile(req, res, file);
+      return sendFile(req, res, file, { untrusted: true });
     }
 
     if (url.pathname.startsWith("/files/")) {
@@ -337,7 +351,7 @@ const server = http.createServer(async (req, res) => {
       if (!SERVABLE.some((r) => r.test(rel)) || rel.includes("..")) return json(res, 403, { error: "inte tillåtet" });
       const file = path.join(projectDir(id), rel);
       if (!existsSync(file)) return json(res, 404, { error: "finns inte" });
-      return sendFile(req, res, file);
+      return sendFile(req, res, file, { untrusted: true });
     }
 
     const rel = url.pathname === "/" ? "index.html" : url.pathname.slice(1);

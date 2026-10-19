@@ -29,7 +29,7 @@ process.on("exit", () => rmSync(serveUrl, { recursive: true, force: true }));
 for (const id of ids) {
   const composition = await selectComposition({ serveUrl, id, ...browser });
   const d = composition.durationInFrames;
-  const frames = Array.from({ length: N }, (_, i) => Math.round(30 + ((d - 60) * i) / (N - 1)));
+  const frames = Array.from({ length: N }, (_, i) => Math.round(N > 1 ? 30 + ((d - 60) * i) / (N - 1) : d / 2));
   const out = path.join(base, id);
   mkdirSync(out, { recursive: true });
   const files = [];

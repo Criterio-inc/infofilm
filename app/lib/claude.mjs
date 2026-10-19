@@ -12,7 +12,7 @@ const ALLOWED = [
   // the same free tools for another format (FORMAT=1:1 …) or another stills folder
   "Bash(FORMAT=* python3 tools/*)", "Bash(FORMAT=* node tools/*)", "Bash(STILLS_DIR=* node tools/*)", "Bash(FORMAT=* STILLS_DIR=* node tools/*)",
   "Bash(cd *)", "Bash(ls*)", "Bash(cat *)", "Bash(head *)", "Bash(tail *)", "Bash(wc *)", "Bash(grep *)",
-  "Bash(mkdir *)", "Bash(cp *)", "Bash(mv *)", "Bash(ffprobe *)", "Bash(rm -rf ../out/stills*)",
+  "Bash(mkdir *)", "Bash(cp *)", "Bash(mv *)", "Bash(ffprobe *)",
 ];
 // the paid steps are the app's buttons, never Claude's
 const DENIED = ["Bash(python3 voice/narrate.py*)", "Bash(python3 voice/design_voice.py*)", "Bash(python3 art/gen.py*)", "Bash(rm -rf /*)"];
@@ -64,7 +64,8 @@ export function claudeStep(id, dir, prompt, { kind = "film" } = {}) {
     /* first conversation in this project */
   }
   const args = [
-    "-p", String(prompt),
+    // a prompt that starts with "-" must not be read as a flag
+    "-p", /^\s*-/.test(String(prompt)) ? ` ${prompt}` : String(prompt),
     "--output-format", "stream-json", "--verbose",
     "--permission-mode", "dontAsk",
     // the film's own Claude: not the user's hooks, MCP servers or memory routines from ~/.claude
@@ -78,7 +79,8 @@ export function claudeStep(id, dir, prompt, { kind = "film" } = {}) {
   ];
   if (session) args.push("--resume", session);
   // a server started from a terminal inside Claude Code must not hand that session's identity on
-  const env = { CLAUDECODE: "", CLAUDE_CODE_SESSION_ID: "", CLAUDE_CODE_CHILD_SESSION: "", CLAUDE_PID: "", CLAUDE_CODE_ENTRYPOINT: "" };
+  // and Claude never needs the paid services' keys: the app runs those steps itself
+  const env = { CLAUDECODE: "", CLAUDE_CODE_SESSION_ID: "", CLAUDE_CODE_CHILD_SESSION: "", CLAUDE_PID: "", CLAUDE_CODE_ENTRYPOINT: "", ELEVENLABS_API_KEY: "", OPENROUTER_API_KEY: "" };
   return { label: session ? "Claude (fortsätter samtalet)" : "Claude", cmd: "claude", args, cwd: dir, env, parse: (line, job) => parseEvent(line, job, dir) };
 }
 

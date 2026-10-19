@@ -15,6 +15,7 @@ export type SceneData = {
   kicker: string; // small label at the right of the title band (film.json "parts")
   title: string; // the card title (<!-- title: … --> in the script)
   bed: string | null; // music bed key for this part
+  last?: boolean; // the film's last scene: it holds and fades with the film instead of leaving
   from: number; // absolute start frame
   durationInFrames: number;
   lead: number; // frames between scene start and first spoken sound

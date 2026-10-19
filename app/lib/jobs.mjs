@@ -10,7 +10,8 @@ const MAX_LINES = 4000;
 
 /**
  * steps: [{ label, cmd, args, cwd, env?, parse?(line, job) → string|null, after?(job) }]
- * parse turns a raw output line into what the log shows (null hides it).
+ * parse turns a raw output line into what the log shows (null hides it). args may be a function,
+ * evaluated when the step starts (so it sees what earlier steps wrote).
  */
 export function startJob(project, title, steps, { onDone } = {}) {
   if (running.has(project)) {
@@ -32,6 +33,7 @@ function push(job, line, kind = "out") {
 }
 
 function finish(job, status, onDone) {
+  if (job.ended) return;
   job.status = status;
   job.ended = Date.now();
   job.child = null;
@@ -46,17 +48,28 @@ function finish(job, status, onDone) {
 
 async function run(job, steps, onDone) {
   for (const step of steps) {
-    if (job.status !== "running") return;
+    if (job.status === "stopped") return finish(job, "stopped", onDone);
     push(job, `▸ ${step.label}`, "step");
     const code = await new Promise((resolve) => {
       let child;
       try {
-        child = spawn(step.cmd, step.args, { cwd: step.cwd, env: toolEnv(step.env), stdio: ["ignore", "pipe", "pipe"] });
+        const args = typeof step.args === "function" ? step.args() : step.args;
+        // its own process group, so Stop also ends what it starts (Chrome, ffmpeg, node)
+        child = spawn(step.cmd, args, { cwd: step.cwd, env: toolEnv(step.env), stdio: ["ignore", "pipe", "pipe"], detached: true });
       } catch (e) {
         push(job, e.message, "err");
         return resolve(1);
       }
       job.child = child;
+      // a parser that throws on an odd line must not take the server down
+      const shown = (raw) => {
+        try {
+          const s = step.parse ? step.parse(raw, job) : raw;
+          return s == null || s === "" ? null : String(s);
+        } catch {
+          return raw;
+        }
+      };
       const feed = (stream, kind) => {
         let buf = "";
         stream.on("data", (d) => {
@@ -65,15 +78,11 @@ async function run(job, steps, onDone) {
           while ((i = buf.indexOf("\n")) >= 0) {
             const raw = buf.slice(0, i).replace(/\r$/, "");
             buf = buf.slice(i + 1);
-            const shown = step.parse ? step.parse(raw, job) : raw;
-            if (shown != null && shown !== "") push(job, shown, kind);
+            if (shown(raw) != null) push(job, shown(raw), kind);
           }
         });
         stream.on("end", () => {
-          if (buf) {
-            const shown = step.parse ? step.parse(buf, job) : buf;
-            if (shown) push(job, shown, kind);
-          }
+          if (buf && shown(buf) != null) push(job, shown(buf), kind);
         });
       };
       feed(child.stdout, "out");
@@ -84,7 +93,7 @@ async function run(job, steps, onDone) {
       });
       child.on("close", (c) => resolve(c ?? 1));
     });
-    if (job.status !== "running") return;
+    if (job.status === "stopped") return finish(job, "stopped", onDone);
     if (code !== 0) {
       push(job, `✗ ${step.label} avslutades med kod ${code}`, "err");
       return finish(job, "failed", onDone);
@@ -99,17 +108,26 @@ async function run(job, steps, onDone) {
   finish(job, "done", onDone);
 }
 
+/** Stop a job: the whole process group gets SIGTERM; run() then finishes it (and onDone logs what was spent). */
 export function stopJob(id) {
   const job = jobs.get(id);
   if (!job || job.status !== "running") return false;
   job.status = "stopped";
-  job.child?.kill("SIGTERM");
   push(job, "■ avbrutet", "err");
-  running.delete(job.project);
-  job.ended = Date.now();
-  for (const l of job.listeners) l({ type: "end", status: "stopped" });
+  const pid = job.child?.pid;
+  if (pid) {
+    try {
+      process.kill(-pid, "SIGTERM");
+    } catch {
+      job.child?.kill("SIGTERM");
+    }
+  } else finish(job, "stopped");
   return true;
 }
+
+/** A second key for a running job (a resource it holds, like the shared preview film). */
+export const lockJob = (key, job) => running.set(key, job.id);
+export const unlockJob = (key) => running.delete(key);
 
 export const getJob = (id) => jobs.get(id);
 export const runningJob = (project) => (running.has(project) ? jobs.get(running.get(project)) : null);

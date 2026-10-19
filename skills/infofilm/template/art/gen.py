@@ -61,7 +61,7 @@ def call(content, aspect):
 
 def prompt_for(shot):
     kind, ref = shot.get("kind", "film"), shot.get("ref", DEFAULT_REF)
-    lead = shot.get("character") or {"character": STYLE["character"], "style": STYLE["style_only"], "none": ""}[ref]
+    lead = shot.get("character") or {"character": STYLE.get("character", ""), "style": STYLE.get("style_only", ""), "none": ""}[ref]
     if shot.get("photos"):
         if ref != "none":
             lead += "The first attached image is that drawing reference; every other attached image is a photograph. "

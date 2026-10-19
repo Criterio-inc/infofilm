@@ -11,7 +11,10 @@ if (typeof document !== "undefined") {
   const handle = delayRender("loading the profile's fonts");
   Promise.all(
     F.faces.map((f) => {
-      const face = new FontFace(f.family, `url(${staticFile(f.src)}) format("woff2")`, {
+      // the client's own files may be woff, ttf or otf as well as woff2
+      const ext = (f.src.split(".").pop() || "woff2").toLowerCase();
+      const fmt = { ttf: "truetype", otf: "opentype", woff: "woff" }[ext] ?? "woff2";
+      const face = new FontFace(f.family, `url(${staticFile(f.src)}) format("${fmt}")`, {
         weight: String(f.weight),
         style: f.style,
         ...(f.unicodeRange ? { unicodeRange: f.unicodeRange } : {}),

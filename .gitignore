@@ -1,2 +1,5 @@
 # the Infofilm app keeps its own state (Claude conversation, test stills) next to a profile
 .infofilm-app.json
+
+# Python caches from syntax checks and runs
+__pycache__/

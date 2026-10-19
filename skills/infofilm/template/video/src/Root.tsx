@@ -22,7 +22,7 @@ export const Root: React.FC = () => (
           fps={FPS}
           width={W}
           height={H}
-          defaultProps={{ timeline: { ...TL, durationInFrames: s.durationInFrames, scenes: [{ ...s, from: 0 }] }, music: false }}
+          defaultProps={{ timeline: { ...TL, durationInFrames: s.durationInFrames, fadeOutFrames: 0, scenes: [{ ...s, from: 0 }] }, music: false }}
         />
       ))}
     </Folder>

@@ -11,6 +11,7 @@ const FadeOut: React.FC<{ timeline: Timeline }> = ({ timeline }) => {
   const f = useCurrentFrame();
   const end = timeline.durationInFrames;
   const len = Math.min(timeline.fadeOutFrames ?? 60, Math.round(timeline.fps * 1.2));
+  if (len < 2) return null; // no fade (a single scene's still, or fadeOut 0)
   const o = interpolate(f, [end - len, end - 1], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" });
   return o > 0 ? <AbsoluteFill style={{ background: "#000", opacity: o }} /> : null;
 };

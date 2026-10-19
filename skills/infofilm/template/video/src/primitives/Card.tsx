@@ -32,7 +32,8 @@ export const Card: React.FC<{
   const f = s.frame;
   const d = s.durationInFrames;
   const z = interpolate(f, [0, d], zoom);
-  const tout = prog(f, d - EXIT, EXIT, ease.in);
+  // the last card does not leave: the film fades out over it
+  const tout = s.last ? 0 : prog(f, d - EXIT, EXIT, ease.in);
   let move: React.CSSProperties;
   if (BRAND.motion === "slide") {
     const tin = prog(f, 0, ENTER, ease.out);

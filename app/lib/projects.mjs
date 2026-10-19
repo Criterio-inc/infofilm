@@ -51,9 +51,19 @@ export function designLinks(input, current = []) {
   return urls.map((url) => known.get(url) || { url });
 }
 
-/** The folders among a profile's or film's design systems, with ~ expanded (Claude may read them). */
+/** The folders among a profile's or film's design systems, with ~ expanded (Claude may read them). Only
+ * real project folders: at least two levels inside the home folder and none of its hidden folders, so a
+ * stray "~" or "/Users" never opens the whole disk to Claude. */
 export const designFolders = (list) =>
-  (list || []).map((d) => (typeof d === "string" ? d : d?.url)).filter((u) => /^(~|\/)/.test(u || "")).map((u) => (u.startsWith("~") ? path.join(os.homedir(), u.slice(1)) : u)).filter((p) => existsSync(p));
+  (list || [])
+    .map((d) => (typeof d === "string" ? d : d?.url))
+    .filter((u) => /^(~|\/)/.test(u || ""))
+    .map((u) => path.resolve(u.startsWith("~") ? path.join(os.homedir(), u.slice(1)) : u))
+    .filter((p) => {
+      const rel = path.relative(os.homedir(), p);
+      return rel && !rel.startsWith("..") && !path.isAbsolute(rel) && rel.split(path.sep).length >= 2 && !rel.split(path.sep).some((s) => s.startsWith("."));
+    })
+    .filter((p) => existsSync(p) && statSync(p).isDirectory());
 
 /** The project folder for an id, or a 404. Ids are folder names directly under the films folder. */
 export function projectDir(id) {
@@ -119,7 +129,9 @@ function steps(s) {
     review: s.scenesBuilt && Boolean(s.preview) && ok("review"),
   };
   // the finished films count once everything before them is done, and only if made after the last change
-  done.deliver = done.script && done.voice && done.images && done.review && s.renders.length > 0 && s.renders[0].mtime >= s.timelineMtime;
+  // …and every format of the film has a render made after the last change
+  const fresh = s.renders.filter((r) => r.mtime >= s.timelineMtime).length;
+  done.deliver = done.script && done.voice && done.images && done.review && fresh >= (s.formats || ["16:9"]).length;
   const list = Object.keys(STEP_NAMES).map((key) => ({ key, label: STEP_NAMES[key], done: done[key] }));
   const current = list.find((x) => !x.done)?.key || "done";
   return { list, current };
@@ -172,7 +184,8 @@ export function summary(id) {
     demo: /^status:\s*demo/m.test(script),
     scenes: scenes.length,
     seconds: tl ? Math.round(tl.durationInFrames / (tl.fps || 30)) : 0,
-    narrated: scenes.filter((x) => !x.estimated).length,
+    // a scene without words (a silent card) has nothing to narrate
+    narrated: scenes.filter((x) => !x.estimated || !String(x.text || "").trim()).length,
     // the built-in end card needs no illustration
     illustrated: scenes.filter((x) => x.name !== "end-card").length,
     images: scenes.filter((x) => x.img && x.name !== "end-card").length,
@@ -270,7 +283,7 @@ export function detail(id) {
         }
         return [...own, ...fromProfile];
       })(),
-      bed: Object.values(readJson(path.join(dir, "film.json"), {}).parts || {}).map((x) => x.bed).find((b) => b) || "",
+      bed: ((fj) => ("bed" in fj ? fj.bed : Object.values(fj.parts || {}).map((x) => x.bed).find((b) => b)) || "")(readJson(path.join(dir, "film.json"), {})),
     },
     claudeSession: app.claudeSession || null,
     claudeLast: app.claudeLast || null,

@@ -95,15 +95,23 @@ def estimated_words(text):
     return out, total
 
 
+def same_file(src, dst):
+    """dst is an up-to-date copy of src (a new file with the same name but an older date is not)."""
+    return dst.exists() and int(dst.stat().st_mtime) == int(src.stat().st_mtime) and dst.stat().st_size == src.stat().st_size
+
+
 def copy_audio(src, dst):
-    if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+    stamp = dst.with_suffix(dst.suffix + ".src")
+    key = f"{src.stat().st_size}:{int(src.stat().st_mtime)}"
+    if dst.exists() and stamp.exists() and stamp.read_text() == key:
         return
     dst.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-ar", "48000", "-b:a", "192k", str(dst)], check=True)
+    stamp.write_text(key)
 
 
 def copy_file(src, dst):
-    if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+    if same_file(src, dst):
         return
     dst.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(src, dst)
@@ -144,6 +152,9 @@ def build_brand():
         fonts[role] = {k: v for k, v in spec.items() if k not in ("files", "google", "weights")}
         # the weight titles and numbers are set in: "weight", else the heaviest one the profile loads
         fonts[role]["weight"] = spec.get("weight") or max(spec.get("weights") or [f.get("weight", 400) for f in spec.get("files", [])] or [400])
+    for role, spec in BRAND.get("fonts", {}).items():
+        if spec.get("google") and not any(f["family"] == spec["family"] for f in faces):
+            print(f"  WARNING: font {spec['family']} ({role}) is not fetched: run python3 tools/fetch_fonts.py, or the film uses a system font")
     for face in faces:
         src = BRAND_DIR / face["file"]
         if not src.exists():
@@ -203,7 +214,10 @@ def main():
             c = CUTS[sp["intro"]]
             intro = {"key": sp["intro"], "at": INTRO_AT}
             # the speech starts after the sung part of the theme (the rest plays under it, ducked)
-            lead = INTRO_AT + round((c.get("sungEnd", c.get("out", 0)) + 0.4) * FPS)
+            # without sung timing (a short sting), the speech waits for the whole cut
+            m = music[sp["intro"]]
+            sung = c["sungEnd"] - c.get("in", 0) if "sungEnd" in c else (m["outFrames"] - m["inFrames"]) / FPS
+            lead = INTRO_AT + round((sung + 0.4) * FPS)
         if "lead_s" in sp:
             lead = round(sp["lead_s"] * FPS)
         audio_frames = round(dur * FPS)
@@ -217,7 +231,8 @@ def main():
         img = f"img/film-{s['id']}.jpg"
         out.append({
             "id": s["id"], "name": s["name"], "part": part, "kicker": pconf.get("kicker", part),
-            "title": s["title"], "bed": pconf.get("bed") if pconf.get("bed") in music else None,
+            # a part without its own bed gets the film's loop (film.json "bed", set by the app's music choice)
+            "title": s["title"], "bed": (lambda b: b if b in music else None)(pconf.get("bed", FILM.get("bed"))),
             "from": frame, "durationInFrames": total, "lead": lead,
             "audio": audio_rel, "audioFrames": audio_frames, "intro": intro, "after": after,
             "text": TAG.sub("", s["text"]), "words": words, "estimated": estimated,
@@ -226,7 +241,9 @@ def main():
         frame += total
 
     if out:
+        # the last card holds and stays: it fades with the film instead of leaving
         out[-1]["durationInFrames"] += END_HOLD
+        out[-1]["last"] = True
         frame += END_HOLD
     tl = {"title": FILM.get("title", ""), "locale": FILM.get("locale", "en-US"), "fps": FPS,
           "durationInFrames": frame, "fadeOutFrames": min(FADE_OUT, frame), "music": music, "scenes": out}

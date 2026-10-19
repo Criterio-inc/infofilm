@@ -1,8 +1,9 @@
 {
-  "_doc": "Starting point for a client profile: copy it with scripts/new_profile.sh, then put in the client's colours, fonts and logo from their brand guidelines. See profiles/README.md.",
+  "_doc": "PLACEHOLDER: starting point for a client profile (scripts/new_profile.sh). Put in the client's colours, fonts and logo from their brand guidelines; the app drops this note on the first save. See profiles/README.md.",
   "name": "Kundnamn",
   "language": "sv",
   "locale": "sv-SE",
+  "formats": ["16:9", "1:1"],
   "kicker": "Kundnamn",
   "designSystems": [],
   "palette": {
