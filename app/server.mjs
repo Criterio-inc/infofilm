@@ -6,6 +6,7 @@ import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } f
 import http from "node:http";
 import path from "node:path";
 import { emptyTrash, listTrash, restore, trashSize } from "./lib/trash.mjs";
+import { chooseVoice, libraryVoices, myVoices, previewClip } from "./lib/voices.mjs";
 import { approve, createProject, deleteProject, PRESETS, reveal, revealFile, runAction, uploadAudio, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
 import { APP_DIR, KEYS, SKILL_DIR, checkKey, loadConfig, loadSecrets, saveConfig, saveSecrets, toolEnv } from "./lib/config.mjs";
 import { getJob, projectJobs, runningJob, stopAll, stopJob, summary as jobSummary } from "./lib/jobs.mjs";
@@ -167,6 +168,14 @@ async function api(req, res, url) {
     return json(res, 202, { id, job: jobSummary(job) });
   }
   if (parts[0] === "profiles") return profilesApi(req, res, parts.slice(1));
+  // voices for a narrator: the user's own and the Swedish voice library (free to list and to hear)
+  if (m === "GET" && parts[0] === "voices" && parts[1] === "mine") return json(res, 200, await myVoices(url.searchParams.has("fresh")));
+  if (m === "GET" && parts[0] === "voices" && parts[1] === "preview") {
+    const clip = await previewClip(url.searchParams.get("url"));
+    res.writeHead(200, { "Content-Type": "audio/mpeg", "Content-Length": clip.length, "Cache-Control": "max-age=86400" });
+    return res.end(clip);
+  }
+  if (m === "GET" && parts[0] === "voices" && parts[1] === "library") return json(res, 200, await libraryVoices(Object.fromEntries(url.searchParams)));
   // the wastebasket: what was deleted, put back, or empty for good
   if (m === "GET" && parts[0] === "trash") return json(res, 200, { items: listTrash(), bytes: trashSize() });
   if (m === "POST" && parts[0] === "trash" && parts[1] === "restore") return json(res, 200, restore((await body(req)).entry));
@@ -226,6 +235,7 @@ async function api(req, res, url) {
       return json(res, 200, { ok: true });
     }
     if (m === "POST" && parts[2] === "delete") return json(res, 200, { entry: deleteProject(id) });
+    if (m === "POST" && parts[2] === "voice-choose") return json(res, 200, await chooseVoice(id, await body(req)));
     if (m === "GET" && parts[2] === "profile-diff") return json(res, 200, profileDiff(id));
     if (m === "POST" && parts[2] === "upload-audio") {
       return json(res, 202, { job: jobSummary(uploadAudio(id, await body(req, 8e7))) });

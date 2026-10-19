@@ -155,3 +155,12 @@ details.tech > summary { color: var(--muted); }
 .sunobox textarea, .sunobox input[readonly] { font-size: 13px; }
 dialog.ask p { white-space: pre-line; }
 .choice.moods { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.voicepicker { margin-top: 6px; }
+.vtabs button.on { border-color: var(--accent); color: var(--ink); }
+.vfilters { margin-top: 8px; }
+.vfilters select { width: auto; }
+.vlist { margin-top: 8px; max-height: 520px; overflow: auto; color: var(--ink); }
+.vrow { display: grid; grid-template-columns: minmax(0, 1fr) 240px auto; gap: 10px; align-items: center; padding: 8px 4px; border-top: 1px solid var(--line); }
+.vrow.on { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.vrow audio { width: 240px; }
+@media (max-width: 700px) { .vrow { grid-template-columns: 1fr; } .vrow audio { width: 100%; } }

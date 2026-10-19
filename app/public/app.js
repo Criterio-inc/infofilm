@@ -258,6 +258,84 @@ const EXPLAIN = [
 ];
 const explain = (text) => EXPLAIN.find(([re]) => re.test(text))?.[1] || "Det gick inte. Låt Claude titta på felet, eller öppna de tekniska detaljerna.";
 
+// ── the narrator picker: the user's voices and the Swedish voice library, with previews ──
+const SV = {
+  gender: { male: "man", female: "kvinna", neutral: "neutral" },
+  age: { young: "ung", middle_aged: "medelålders", old: "äldre" },
+  use_case: { narrative_story: "berättande", informative_educational: "information", advertisement: "reklam", social_media: "sociala medier", conversational: "samtal", characters_animation: "karaktärer", entertainment_tv: "underhållning" },
+};
+function voicePicker(box, p, enc, reload, busy) {
+  const list = box.querySelector("#vlist");
+  const more = box.querySelector("#vmore");
+  const filters = box.querySelector(".vfilters");
+  let tab = "mine";
+  let page = 0;
+  const current = box.dataset.current;
+  const done = p.scenes.filter((s) => s.narrated && String(s.text || "").trim());
+  const meta = (v) => [SV.gender[v.gender], SV.age[v.age], SV.use_case[v.use_case] || ""].filter(Boolean).join(" · ");
+  const rowHtml = (v) => `<div class="vrow ${v.voice_id === current ? "on" : ""}">
+      <div class="vname"><b>${esc(v.name)}</b> <span class="muted">${esc(meta(v))}</span>${v.description ? `<div class="muted">${esc(v.description)}</div>` : ""}</div>
+      ${v.preview_url ? `<audio controls preload="none" src="/api/voices/preview?url=${encodeURIComponent(v.preview_url)}"></audio>` : `<span class="muted">inget prov</span>`}
+      ${v.voice_id === current ? `<span class="ok">vald</span>` : `<button type="button" data-vpick="${esc(v.voice_id)}" data-vname="${esc(v.name)}" ${v.public_owner_id ? `data-vowner="${esc(v.public_owner_id)}"` : ""} ${busy ? "disabled" : ""}>Välj</button>`}
+    </div>`;
+  const wire = () =>
+    list.querySelectorAll("[data-vpick]").forEach((b) => b.addEventListener("click", async () => {
+      // another voice reads differently: scenes already read are read again (and billed) on the next reading
+      const chars = done.reduce((n, s) => n + s.text.length, 0);
+      const lib = b.dataset.vowner ? "\n\nRösten läggs till bland dina röster hos ElevenLabs." : "";
+      const redo = done.length && p.voice.id ? `\n\nDe ${done.length} inlästa scenerna läses in igen med den nya rösten när du trycker Läs in rösten, ungefär ${kr(chars)} tecken.` : "";
+      if (!(await ask({ title: `Välj ${b.dataset.vname}?`, text: `Berättaren i den här filmen blir ${b.dataset.vname}.${redo}${lib}`, ok: "Välj rösten" }))) return;
+      b.disabled = true;
+      try {
+        await api(`projects/${enc}/voice-choose`, { body: { voice_id: b.dataset.vpick, name: b.dataset.vname, ...(b.dataset.vowner ? { public_owner_id: b.dataset.vowner } : {}) } });
+        toast(`${b.dataset.vname} är vald`);
+        reload();
+      } catch (e) {
+        toast(e.message);
+        b.disabled = false;
+      }
+    }));
+  const load = async (append = false) => {
+    if (!append) list.innerHTML = "Laddar röster …";
+    try {
+      let voices, hasMore = false;
+      if (tab === "mine") {
+        const r = await api("voices/mine");
+        voices = r.voices;
+      } else {
+        const q = new URLSearchParams({ page: String(page) });
+        filters.querySelectorAll("[data-vf]").forEach((el) => el.value && q.set(el.dataset.vf, el.value));
+        const r = await api(`voices/library?${q}`);
+        voices = r.voices;
+        hasMore = r.has_more;
+      }
+      const html = voices.length ? voices.map(rowHtml).join("") : `<p class="muted">Inga röster matchar. Prova andra filter.</p>`;
+      list.innerHTML = append ? list.innerHTML + html : html;
+      more.hidden = !hasMore;
+      wire();
+    } catch (e) {
+      list.innerHTML = `<p class="bad">${esc(e.message)}</p>`;
+    }
+  };
+  box.querySelectorAll("[data-vtab]").forEach((b) => b.addEventListener("click", () => {
+    box.querySelectorAll("[data-vtab]").forEach((x) => x.classList.toggle("on", x === b));
+    tab = b.dataset.vtab;
+    filters.hidden = tab !== "lib";
+    page = 0;
+    load();
+  }));
+  let typing;
+  filters.querySelectorAll("[data-vf]").forEach((el) => el.addEventListener(el.tagName === "INPUT" ? "input" : "change", () => {
+    clearTimeout(typing);
+    typing = setTimeout(() => ((page = 0), load()), el.tagName === "INPUT" ? 400 : 0);
+  }));
+  more.addEventListener("click", () => ((page += 1), load(true)));
+  // a picker inside a closed "Byt röst" loads when it is opened
+  const det = box.closest("details");
+  if (det && !det.open) det.addEventListener("toggle", () => det.open && !list.dataset.loaded && ((list.dataset.loaded = "1"), load()), { once: false });
+  else load();
+}
+
 async function jobText(jobId) {
   const t = await (await fetch(`/api/jobs/${jobId}/stream`)).text();
   return t.split("\n\n").filter((x) => x.startsWith("data: ")).flatMap((x) => {
@@ -321,30 +399,41 @@ async function projectPage(id) {
   }
 
   if (view === "voice") {
-    if (!p.voice.id && p.voice.previews.length) {
+    // the narrator: chosen here, from the user's voices or the Swedish voice library, or designed from takes
+    const picker = `<div class="voicepicker" id="voicepicker" data-current="${esc(p.voice.id || "")}">
+        <div class="row vtabs"><button type="button" class="on" data-vtab="mine">Dina röster</button><button type="button" data-vtab="lib">Svenska röster i biblioteket</button></div>
+        <div class="row vfilters" hidden>
+          <select data-vf="gender"><option value="">Alla röster</option><option value="female">Kvinnor</option><option value="male">Män</option></select>
+          <select data-vf="age"><option value="">Alla åldrar</option><option value="young">Unga</option><option value="middle_aged">Medelålders</option><option value="old">Äldre</option></select>
+          <select data-vf="use_case"><option value="">All användning</option><option value="narrative_story">Berättande</option><option value="informative_educational">Information och utbildning</option><option value="advertisement">Reklam</option><option value="social_media">Sociala medier</option><option value="conversational">Samtal</option><option value="characters_animation">Karaktärer</option></select>
+          <input type="text" data-vf="search" placeholder="Sök på engelska, till exempel calm, deep eller warm" style="flex:1;min-width:160px">
+        </div>
+        <div id="vlist" class="vlist small muted">Laddar röster …</div>
+        <div class="row" style="margin-top:8px"><button type="button" id="vmore" hidden>Visa fler</button></div>
+      </div>`;
+    if (!p.voice.id) {
       card.title = "Välj berättarröst";
-      card.text = "Lyssna på proven och välj den röst som passar. Den sparas så att du kan använda den igen.";
-      card.body = `<div class="stack">${p.voice.previews.map((v) => `<div class="row"><span class="small" style="width:90px">Prov ${esc(v.take)}</span><audio controls preload="none" src="${fileUrl(id, v.src)}" style="flex:1;min-width:180px"></audio><button data-pick="${esc(v.generated_voice_id)}" ${busy ? "disabled" : ""}>Välj</button></div>`).join("")}</div>`;
-      card.main = pay("voice-preview", "Gör tre nya prov", "Tre nya röstprov (ElevenLabs, några hundra tecken)");
-    } else if (!p.voice.id) {
-      card.title = "Gör röstprov";
-      card.text = "ElevenLabs gör tre förslag på berättarröst utifrån beskrivningen nedan. Du lyssnar och väljer en.";
-      card.facts = ["Kostar några hundra tecken hos ElevenLabs", "Tar under en minut"];
-      card.body = `<p class="small muted">${esc(p.voice.design.description || "")}</p>`;
-      card.main = pay("voice-preview", "Gör tre röstprov", "Tre röstprov (ElevenLabs, några hundra tecken)");
+      card.text = "Lyssna och välj bland dina röster, eller bland de svenska rösterna i ElevenLabs bibliotek. Att lyssna och välja kostar inget.";
+      card.body = picker;
+      card.more = `<details style="margin-top:8px" ${p.voice.previews.length ? "open" : ""}><summary>Eller gör egna röstprov utifrån en beskrivning</summary>
+        <p class="small muted">${esc(p.voice.design.description || "")}</p>
+        ${p.voice.previews.length ? `<div class="stack">${p.voice.previews.map((v) => `<div class="row"><span class="small" style="width:90px">Prov ${esc(v.take)}</span><audio controls preload="none" src="${fileUrl(id, v.src)}" style="flex:1;min-width:180px"></audio><button data-pick="${esc(v.generated_voice_id)}" ${busy ? "disabled" : ""}>Välj</button></div>`).join("")}</div>` : ""}
+        <div class="row" style="margin-top:8px">${pay("voice-preview", p.voice.previews.length ? "Gör tre nya prov" : "Gör tre röstprov", "Tre röstprov (ElevenLabs, några hundra tecken)").replace('class="primary"', "")}</div></details>`;
     } else if (unnarrated.length) {
       card.title = "Läs in rösten";
       card.text = `${esc(p.voice.name || "Berättaren")} läser ${unnarrated.length === p.scenes.length ? "manuset" : `${unnarrated.length} ändrade scener`}, scen för scen. Efteråt lyssnar du.`;
       card.facts = [`Kostar ungefär ${kr(chars)} tecken<span data-credit="eleven"></span>`, "Tar ungefär en minut"];
       card.main = pay("narrate", "Läs in rösten", `Berättarröst, ungefär ${kr(chars)} tecken hos ElevenLabs`);
+      card.more = `<details style="margin-top:8px"><summary>Byt röst</summary>${picker}</details>`;
     } else {
       card.title = "Lyssna på rösten";
       card.text = "Lyssna scen för scen. Låter något fel, skriv vad i rutan nedanför så skriver Claude om texten, och bara den scenen läses in igen.";
       card.body = `<div class="scenes">${p.scenes.filter((s) => s.audio).map((s) => `<div class="scene"><div class="scene-h"><b>${esc(s.title || s.name)}</b></div><audio controls preload="none" src="${fileUrl(id, s.audio)}"></audio><p class="small muted">${esc(s.text)}</p></div>`).join("")}</div>`;
       card.main = goNext;
-      card.more = `<button class="link small" data-voice-profile>Spara ${esc(p.voice.name || "rösten")} som ${esc(p.profileName)}s standardröst</button>`;
+      card.more = `<button class="link small" data-voice-profile>Spara ${esc(p.voice.name || "rösten")} som ${esc(p.profileName)}s standardröst</button>
+        <details style="margin-top:8px"><summary>Byt röst (scenerna läses in igen)</summary>${picker}</details>`;
     }
-    card.more += `<details style="margin-top:8px"><summary>Byt röst eller ändra beskrivningen</summary>
+    card.more += `<details style="margin-top:8px"><summary>Ändra röstbeskrivningen eller klistra in ett Voice ID</summary>
       <form id="voicef" class="stack" style="margin-top:8px">
         <div><label>Beskrivning av berättaren <span class="hint">– på engelska: kön, ålder, klang, tempo, dialekt</span></label><textarea name="description" rows="3">${esc(p.voice.design.description || "")}</textarea></div>
         <div><label>Provtext</label><textarea name="text" rows="2">${esc(p.voice.design.text || "")}</textarea></div>
@@ -539,6 +628,7 @@ async function projectPage(id) {
       toast(err.message);
     }
   });
+  if ($("#voicepicker")) voicePicker($("#voicepicker"), p, enc, reload, busy);
   app.querySelector("[data-delete-film]")?.addEventListener("click", async () => {
     if (!(await ask({ title: `Radera ${p.title}?`, text: "Filmen flyttas till papperskorgen och kan återställas under Inställningar tills du tömmer den.", ok: "Radera filmen" }))) return;
     try {
