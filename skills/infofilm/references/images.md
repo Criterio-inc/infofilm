@@ -34,3 +34,10 @@ After a regenerated image, re-measure anything a scene positions over the pictur
 
 ## Style proposals (phase 2)
 To compare looks, keep the same infographic and change only the style. For example, a parliament hemicycle with a "175 = majority" bracket, rendered as N style variants (`kind: "scene"`, `ref: "none"`). The image model gets diagrams wrong (wrong counts, misplaced brackets), which proves the point: diagrams are drawn in code, and only the mood comes from the model.
+
+## Real places: photographs as a form reference
+For a film about a real building or place, the model's own idea of it is a generic version: "Kalmar Castle" without photographs came out as a symmetric star fort with four round bastions and a stone arch bridge. With photographs it got the silhouette, the copper caps and lanterns, the stepped gables, the timber bridge with its drawbridge and the courtyard well right.
+- Collect freely licensed photographs (Wikimedia Commons, museum images marked public domain) in `art/ref/`, scaled down to 1600 px. List each one's page, author, date and licence in `art/ref/SOURCES.md`. Credit CC BY and BY-SA photographers in the film's end credits.
+- Add `"photos": ["ref/….jpg", …]` to the shot. `gen.py` attaches them after the mascot or style reference, with an instruction to keep the architecture and take nothing else from the photographs (style.json can override it with `photos`).
+- One photograph from the viewpoint you want gives the most faithful result. 2–4 photographs from several sides let the model compose a new viewpoint, and each part comes out right, but how the parts sit relative to each other cannot be checked against anything. If that matters, render a 3D model, if one exists, from the wanted camera and attach the render as the form reference.
+- Make a sheet with the photographs beside each image (one per shot) and check the form against them, not just the style.

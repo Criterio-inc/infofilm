@@ -7,11 +7,14 @@
 
 COSTS MONEY (about $0.14 per 2K image). Ask the user before a batch.
 
-A shot in art/shots.json is {"id", "prompt", "kind"?, "aspect"?, "ref"?, "character"?}:
+A shot in art/shots.json is {"id", "prompt", "kind"?, "aspect"?, "ref"?, "character"?, "photos"?}:
   kind    "film" (default: a scene illustration for the card window, 21:9), "sheet" (model/pose
           sheet, 16:9), "scene" (full-bleed 16:9), "ref" (the mascot reference itself, 1:1)
   ref     "character" (default: attach the mascot reference, keep him identical), "style" (attach
           it only for the ink style, leave him out), "none" (text only — for the reference itself)
+  photos  paths under art/ to real photographs of a real place or object (art/ref/*.jpg): attached
+          after the mascot reference as a FORM reference, so towers, roofs and windows come out
+          right. Record every photo's source and licence in art/ref/SOURCES.md.
 Everything about the look lives in art/style.json, so every prompt gets the same style suffix.
 Pictures never contain text: titles, numbers and labels are drawn in code.
 """
@@ -31,6 +34,12 @@ MODEL = STYLE.get("model", "google/gemini-3-pro-image")
 REF = HERE / STYLE.get("reference", "img/ref-mascot.png")
 ASPECT = {"film": "21:9", "sheet": "16:9", "scene": "16:9", "ref": "1:1"}
 COST = 0.14
+# the default form instruction for shots with "photos"; style.json can override it with "photos"
+PHOTOS = ("The attached photographs show the real place. Keep its architecture exactly as the photographs show it: "
+          "the outline, the number, placement and shape of the towers, the roof shapes and pitches, the spires, domes "
+          "and lanterns, the chimneys, the walls, windows and gates, and the proportions between them. Redraw it in the "
+          "drawing style described below, and take nothing else from the photographs: not their colours, light, "
+          "people, flags or signs.")
 
 
 def call(content, aspect):
@@ -46,7 +55,16 @@ def call(content, aspect):
 def prompt_for(shot):
     kind, ref = shot.get("kind", "film"), shot.get("ref", "character")
     lead = shot.get("character") or {"character": STYLE["character"], "style": STYLE["style_only"], "none": ""}[ref]
+    if shot.get("photos"):
+        if ref != "none":
+            lead += "The first attached image is that drawing reference; every other attached image is a photograph. "
+        lead += STYLE.get("photos", PHOTOS) + " "
     return lead + shot["prompt"] + " " + STYLE["ink"] + " " + STYLE["kinds"][kind] + " " + STYLE["never"]
+
+
+def data_url(path):
+    mime = "image/jpeg" if path.suffix.lower() in (".jpg", ".jpeg") else "image/png"
+    return {"type": "image_url", "image_url": {"url": f"data:{mime};base64," + base64.b64encode(path.read_bytes()).decode()}}
 
 
 def generate(shot):
@@ -56,7 +74,9 @@ def generate(shot):
         if not REF.exists():
             print(f"skip {shot['id']}: no reference image at {REF} — generate the kind 'ref' shot first")
             return 0
-        content.append({"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(REF.read_bytes()).decode()}})
+        content.append(data_url(REF))
+    for p in shot.get("photos", []):
+        content.append(data_url(HERE / p))
     aspect = shot.get("aspect") or ASPECT[shot.get("kind", "film")]
     for attempt in range(3):
         try:
