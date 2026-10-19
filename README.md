@@ -21,7 +21,14 @@ kundprofil → research → faktagranskat manus → berättarröst (ElevenLabs, 
 - **Filmen spelar alltid.** Scener utan komponent visas som kort, och scener utan röst får uppskattad tajming. Du kan alltså granska hela filmen innan något kostar pengar.
 - **Pengar kräver ett ja.** Röst, bilder och musik har `--dry-run` som visar kostnaden, och skillen frågar innan den spenderar.
 
-## Kom igång
+## Appen
+I `app/` finns en liten lokal app som du startar från Dock. Den har en guide för nya filmer, en projektlista och knappar för förhandsvisning, stillbilder och rendering. Röst och bilder kräver ditt godkännande innan något debiteras, och via rutan **Be Claude** ger du instruktioner till Claude i varje projekt. Installera allt på en Mac med:
+```bash
+git clone https://github.com/Criterio-inc/infofilm.git ~/infofilm && ~/infofilm/app/macos/setup.sh
+```
+Mer finns i [app/README.md](app/README.md).
+
+## Kom igång (utan appen)
 ```bash
 git clone https://github.com/Criterio-inc/infofilm.git
 cd infofilm && ./install.sh --link       # länkar skillen till ~/.claude/skills/infofilm
