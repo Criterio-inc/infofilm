@@ -7,11 +7,20 @@
 ## Order of work
 1. **The mascot reference**, `kind: "ref"`, `ref: "none"`. A full-body portrait on plain paper. Iterate until the user approves the face, glasses, hair, outfit and props. Name it in `style.json` → `reference`.
 2. **A model sheet**, `kind: "sheet"`: turnaround, expressions and the signature gesture. It catches drift before 27 scene images do.
-3. **Scene images**, `film-Sxx`, `kind: "film"` (21:9). One per scene, written from the scene's `> visual:` line. Describe the action and the setting; leave out any text, numbers or signs.
+3. **Scene images**, `film-Sxx`, `kind: "film"` (shaped for the film's formats, see below). One per scene, written from the scene's `> visual:` line. Describe the action and the setting; leave out any text, numbers or signs.
 4. **Props and environments** if scenes need them (`kind: "scene"` with `ref: "style"` borrows the ink style without the mascot).
 
-## Why 21:9
-The card's picture window is 1800×749, about 2.4:1. A 16:9 image loses its top and bottom, including the mascot's hat. Generate 21:9, and ask for "breathing room above and below". The `film` kind says so.
+## The shape of a film image
+`gen.py` picks the aspect from film.json `formats`, because the card's picture window has a different shape in each:
+
+| Formats | Window | Image |
+|---|---|---|
+| 16:9 only | 1800×749, about 2.4:1 | 21:9 |
+| 1:1 only | 1020×798, about 1.28:1 | 5:4 |
+| 9:16 only | 1020×1574 | 3:4 |
+| several | — | 16:9, cropped at the top and bottom in 16:9 and at the sides in 1:1 |
+
+A wrongly shaped image loses its top and bottom, including the mascot's hat. Ask for the subject in the centre, "with breathing room on all sides"; the `film` kind in `style.json` says so. Settle the formats before you generate the images.
 
 ## Character consistency
 - Every scene image carries the reference image (image-to-image) plus a `character` paragraph that names every feature to keep. Restate the outfit in that paragraph.

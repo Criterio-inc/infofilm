@@ -1,10 +1,14 @@
 import React from "react";
 import { AbsoluteFill, useCurrentFrame } from "remotion";
 import { rand } from "../anim";
-import { C, H, W } from "../theme";
+import { BRAND, C, H, W } from "../theme";
 
-/** The table the cards are dealt onto: deep navy with faint atomic-age starbursts. */
+/** The table the cards sit on. Profile "backdrop": "starbursts" (newsreel: deep navy with faint
+ * atomic-age starbursts) or "plain" (a calm gradient in the backdrop colours). */
 export const Backdrop: React.FC = () => {
+  if (BRAND.backdrop === "plain") {
+    return <AbsoluteFill style={{ background: `radial-gradient(ellipse at 50% 35%, ${C.backdropLight} 0%, ${C.backdrop} 80%)` }} />;
+  }
   const stars = Array.from({ length: 26 }, (_, i) => ({
     x: rand(`sx${i}`) * W,
     y: rand(`sy${i}`) * H,
@@ -12,10 +16,10 @@ export const Backdrop: React.FC = () => {
     rot: rand(`so${i}`) * 90,
   }));
   return (
-    <AbsoluteFill style={{ background: `radial-gradient(ellipse at 50% 40%, #2c4462 0%, ${C.navyDeep} 70%)` }}>
+    <AbsoluteFill style={{ background: `radial-gradient(ellipse at 50% 40%, ${C.backdropLight} 0%, ${C.backdrop} 70%)` }}>
       <svg width={W} height={H} style={{ position: "absolute", opacity: 0.1 }}>
         {stars.map((s, i) => (
-          <g key={i} transform={`translate(${s.x} ${s.y}) rotate(${s.rot})`} fill={C.gold}>
+          <g key={i} transform={`translate(${s.x} ${s.y}) rotate(${s.rot})`} fill={C.accent}>
             <path d={`M0 ${-s.r} L${s.r * 0.18} 0 L0 ${s.r} L${-s.r * 0.18} 0 Z`} />
             <path d={`M${-s.r} 0 L0 ${s.r * 0.18} L${s.r} 0 L0 ${-s.r * 0.18} Z`} />
           </g>
@@ -25,9 +29,11 @@ export const Backdrop: React.FC = () => {
   );
 };
 
-/** Old-film look on top of everything: grain, flicker, a few dust specks and a vignette. */
+/** Old-film look on top of everything: grain, flicker, a few dust specks and a vignette.
+ * Only with profile "filmLook": true. */
 export const FilmLook: React.FC = () => {
   const f = useCurrentFrame();
+  if (!BRAND.filmLook) return null;
   const seed = f % 8;
   const flicker = 0.035 + rand(`fl${f}`) * 0.035;
   const specks = Array.from({ length: 3 }, (_, i) => ({
@@ -66,6 +72,7 @@ export const FilmLook: React.FC = () => {
 /** Gate weave: the whole picture drifts a pixel or two, like film in a projector. */
 export const Weave: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const f = useCurrentFrame();
+  if (!BRAND.filmLook) return <AbsoluteFill>{children}</AbsoluteFill>;
   const dx = (rand(`wx${Math.floor(f / 2)}`) - 0.5) * 2.2;
   const dy = (rand(`wy${Math.floor(f / 2)}`) - 0.5) * 2.2;
   return <AbsoluteFill style={{ transform: `translate(${dx}px, ${dy}px)` }}>{children}</AbsoluteFill>;

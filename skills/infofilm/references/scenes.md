@@ -9,6 +9,13 @@
   - `python3 tools/cues.py <name> "phrase"` prints frames.
   - `python3 tools/lint_cues.py` fails on any cue that doesn't occur in its scene's narration.
 
+## One scene, every format
+The film can render in 16:9, 1:1 and 9:16 (film.json `formats`), so a scene never assumes 1800×749:
+- Lay out from `WIN.w` / `WIN.h`, and branch on `WIDE` (true at 16:9) between a row layout and a stacked one. The golden scenes keep one small layout object, `const L = WIDE ? {…} : {…}`, and use it everywhere.
+- Check the stills in every format: `FORMAT=1:1 python3 tools/build_timeline.py`, render the stills, then `python3 tools/build_timeline.py` to go back.
+- Colours come only from `C`, by role: `primary`, `accent`, `signal`, `surfaceLight`, `ink` … The profile decides what they are.
+- Titles and big numbers use `...DISPLAY_FONT` (the family *and* its weight); labels use `fontFamily: UI` with a `fontWeight`.
+
 ## Golden scenes first
 The scaffold ships the demo's golden scenes (`TheYear.tsx`, `TheRule.tsx`, registered in `golden.ts`). Delete them and register your own.
 Build the two scenes that carry the film's central infographics **yourself**, before you fan out. They set the bar for density, timing, type sizes, plate placement, captions and stamps, and every builder copies their structure. The template ships two: `TheYear.tsx` (a counter, an orbit, a decimal snapping on with a stamp) and `TheRule.tsx` (three rules, then three verdicts landing on their years).
@@ -45,15 +52,16 @@ When they finish, run `lint_cues.py` and `tsc`, then review every scene yourself
 ## Primitives
 | Name | Use |
 |---|---|
+| `EndCard` | the closing card: the client's logo, line and address (the `end-card` scene uses it by itself) |
 | `Card` | the scene's frame: `title`, `titleNode` (custom title, e.g. a Lobster slogan), `kicker`, `img`, `zoom`, `focus`, `dim`, `caption`, children in window coordinates |
-| `Plate` | a cream panel with an ink border for an infographic |
+| `Plate` | a light panel for an infographic (the profile's `plate` style) |
 | `Captions` | caption text that swaps on cues |
 | `Counter` | a number that counts up and lands on a frame |
 | `Stamp` | a rubber stamp slamming down, with a thump |
 | `Token` | a round letter marker for an entity |
 | `Appear` | fade + rise in, optional out |
 | `Sfx` | one sound effect at a frame |
-| `Label` | Jost text |
+| `Label` | UI text |
 | `fmt` | locale number formatting |
 | `KineticLyrics` | sung lines as big bouncing type, word by word on the beat |
 | `CommercialBreak` | a test card under the narrator, a CRT switch on the jingle, then the picture with kinetic lyrics, glitter and your product shots as children |

@@ -1,10 +1,10 @@
 # Scene builder contract
 
-You build animated scenes for an infographic explainer film (1920×1080, 30 fps, Remotion 4). The orchestrator fills in the `{{…}}` placeholders below before handing this out.
+You build animated scenes for an infographic film or clip (30 fps, Remotion 4) in a client's look. It renders in {{FORMATS}} (16:9 = 1920×1080, 1:1 = 1080×1080). The orchestrator fills in the `{{…}}` placeholders below before handing this out.
 
 - **Film:** {{TITLE}}, about {{MINUTES}} minutes, narrated in {{LANGUAGE}}. On-screen text is in {{LANGUAGE}} too, with correct diacritics (å ä ö é ü …) everywhere.
-- **Look:** the house style: a 1950s instructional card with cream paper, navy and golden yellow, thick ink, halftone dots, and a retro-futurist world (the future as imagined in 1957: googie, chrome, rockets, monorails, friendly robots). Replace this line if the film has its own look.
-- **Tone:** American 1950s commercial enthusiasm, cheerful and a little too eager, with a dry irony that the shiny machine keeps getting stuck. Replace this line if the film has its own tone.
+- **Client and look:** {{CLIENT}}, profile `{{PROFILE}}`. The look comes from `../brand/profile.json` through `theme.ts` and `fonts.ts`. Read `../brand/NOTES.md` for the tone and the rules.
+- **Tone:** {{TONE}}
 
 This is an **explanatory film about real things**. Every number on screen must be true. If the subject is political, every party or side is treated exactly alike.
 
@@ -12,9 +12,9 @@ This is an **explanatory film about real things**. Every number on screen must b
 1. `../script/script.md` is the manuscript. Each `## Sxx · name` is one scene. `> visual:` is the direction: follow it, or do something better that shows the same facts. Everything else is the narration.
 2. `src/scenes/golden.ts` lists the **golden scenes**. Read them and match their structure and quality.
 3. These files:
-   - `src/theme.ts` (colours `C`; card geometry `CARD`/`WIN`)
+   - `src/theme.ts` (colours `C` by role; card geometry `CARD`/`WIN`; `WIDE` and `FORMAT`)
    - `src/fonts.ts`, `src/anim.ts`, `src/timing.tsx`, `src/data.ts`, `src/lyrics.ts`
-   - everything in `src/primitives/`: `Card`, `Plate`, `Captions`, `Counter`, `Stamp`, `Token`, `Appear`, `Sfx`, `Label`, `fmt`, and in `Jingle.tsx` `KineticLyrics`, `CommercialBreak`, `TestCard`, `Starburst`, `beatPulse` and `wordFrames`.
+   - everything in `src/primitives/`: `Card`, `EndCard`, `Plate`, `Captions`, `Counter`, `Stamp`, `Token`, `Appear`, `Sfx`, `Label`, `fmt`, and in `Jingle.tsx` `KineticLyrics`, `CommercialBreak`, `TestCard`, `Starburst`, `beatPulse` and `wordFrames`.
 4. `../notes/research.md` is the fact base. `src/data.ts` holds every number, with its source.
 
 ## Where your code goes
@@ -27,8 +27,8 @@ This is an **explanatory film about real things**. Every number on screen must b
 ## The card is the film
 Every scene is one `<Card>`: a title band, a picture window and a caption band. The card deals itself in and flies out by itself, so **never animate the whole scene in or out**.
 - Pass `title={s.title}`, `kicker={s.kicker}` and `img={s.img}` from `useScene()`. `s.img` is `null` until the illustration exists, and the card then draws a halftone ground, so always pass it through.
-- Everything you draw as `children` is in **window coordinates**: 0..1800 × 0..749.
-- `dim` (0..1) darkens the picture when an infographic goes on top. Draw infographics on a `<Plate>` (a cream panel with an ink border).
+- Everything you draw as `children` is in **window coordinates**: 0..WIN.w × 0..WIN.h. That is 1800×749 at 16:9 and 1020×798 at 1:1. Lay out from `WIN` and `WIDE` (a row when wide, stacked otherwise), like the golden scenes, so the scene works in every format.
+- `dim` (0..1) darkens the picture when an infographic goes on top. Draw infographics on a `<Plate>` (a light panel in the profile's style).
 - `caption` is the bottom band. Use `<Captions items={[{at, text}]}>`, which swaps the text on cues. Keep it under about 60 characters and on one line.
 - The picture has a slow camera move (`zoom`, `focus`). Pick a `focus` that keeps the mascot or the subject in view when plates go on top, and let plates leave the mascot visible beside them.
 - Many scenes work best when the picture plays alone for 2–4 s while the narration starts, and the infographic arrives on the right word.
@@ -44,12 +44,12 @@ Every scene is one `<Card>`: a title band, a picture window and a caption band. 
 - Sung lines in `src/lyrics.ts` have times in seconds from the start of the cut. A jingle starts at `s.after.at`.
 
 ## Visual language (unconditional)
-- **Colours:** only from `C` in `theme.ts`. Data colours (parties, countries) come from `data.ts` and are used only for that entity's own data.
-- **Fonts:** `DISPLAY` (Bowlby One SC) for titles, stamps and big numbers; `UI` (Jost) for labels and sentences; `SCRIPT` (Lobster) **only** in commercial breaks.
+- **Colours:** only from `C` in `theme.ts`, by role (`primary`, `accent`, `signal`, `ink`, `surfaceLight`, `faint` …). Never type a hex value: the profile decides the colours. Data colours (parties, countries) come from `data.ts` and are used only for that entity's own data.
+- **Fonts:** `...DISPLAY_FONT` (family and weight) for titles, stamps and big numbers; `fontFamily: UI` with a `fontWeight` for labels and sentences; `SCRIPT` **only** in commercial breaks. Respect `DISPLAY_UPPER` for display text.
 - **Entities** (parties, countries, institutions) appear as `Token`s or plates of the same size, type and animation, with their full name in text. No logos, no portraits and no real people in pictures. People are named only in text.
 - **Numbers** come only from `data.ts`. Format them with `fmt()`, which follows the film's locale. A small source line (UI, 20 px, `C.faint`) is good next to exact figures.
 - **On-screen text:** titles at most 5 words, labels at most 8. No paragraphs: the narrator speaks the sentences.
-- **Up and down** in data are ▲ and ▼ in navy. Never use red and green as good and bad for a side's data.
+- **Up and down** in data are ▲ and ▼ in `C.primary`. Never use red and green as good and bad for a side's data.
 - **The forbidden motifs** listed in `../art/style.json` ("never") are forbidden in code too. That covers shapes, symbols and words.
 
 ## Energy
@@ -67,7 +67,7 @@ Every scene is one `<Card>`: a title band, a picture window and a caption band. 
 - TypeScript must compile: `npx tsc --noEmit -p .` (from `video/`).
 
 ## Verify like a designer
-Render 5–8 stills per scene at meaningful cue frames in ONE call, and LOOK at the contact sheet:
+Render 5–8 stills per scene at meaningful cue frames in ONE call, and LOOK at the contact sheet. Render only the main format: switching formats rewrites the shared timeline, so the orchestrator checks the other formats after you finish. Lay the scene out from `WIN` and `WIDE` so it holds up there.
 ```
 node tools/stills.mjs <Sxx-scene-name> <frame,frame,…>
 ```

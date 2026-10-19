@@ -11,10 +11,13 @@ import path from "node:path";
 const [nArg, ...ids] = process.argv.slice(2);
 const N = Number(nArg);
 const base = process.env.STILLS_DIR ? path.join(process.env.STILLS_DIR, "review") : path.resolve("../out/review");
+// BROWSER_EXECUTABLE (+ CHROME_MODE=chrome-for-testing for a full Chrome) uses an installed browser
+// instead of Remotion's download, e.g. in a sandbox without access to remotion.media
+const browser = { browserExecutable: process.env.BROWSER_EXECUTABLE ?? null, chromeMode: process.env.CHROME_MODE ?? "headless-shell" };
 const serveUrl = await bundle({ entryPoint: path.resolve("src/index.ts") });
 process.on("exit", () => rmSync(serveUrl, { recursive: true, force: true }));
 for (const id of ids) {
-  const composition = await selectComposition({ serveUrl, id });
+  const composition = await selectComposition({ serveUrl, id, ...browser });
   const d = composition.durationInFrames;
   const frames = Array.from({ length: N }, (_, i) => Math.round(30 + ((d - 60) * i) / (N - 1)));
   const out = path.join(base, id);
@@ -22,7 +25,7 @@ for (const id of ids) {
   const files = [];
   for (const f of frames) {
     const output = path.join(out, `${id}_${f}.png`);
-    await renderStill({ serveUrl, composition, frame: f, output, overwrite: true, logLevel: "error" });
+    await renderStill({ serveUrl, composition, frame: f, output, overwrite: true, logLevel: "error", ...browser });
     files.push(output);
   }
   const cols = 3;

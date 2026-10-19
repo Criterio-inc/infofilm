@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill } from "remotion";
 import { clamp01, ease, pop, prog, rand } from "../anim";
-import { DISPLAY, SCRIPT, UI } from "../fonts";
+import { DISPLAY_FONT, SCRIPT, SCRIPT_WEIGHT, UI, weightOf } from "../fonts";
 import type { Line } from "../lyrics";
 import { Captions, Card } from "./Card";
 import { C, FPS, WIN } from "../theme";
@@ -38,7 +38,7 @@ export const Starburst: React.FC<{
   rotate?: number;
   opacity?: number;
   children?: React.ReactNode;
-}> = ({ x, y, r, fill = C.gold, scale = 1, rotate = 0, opacity = 1, children }) => (
+}> = ({ x, y, r, fill = C.accent, scale = 1, rotate = 0, opacity = 1, children }) => (
   <div
     style={{
       position: "absolute",
@@ -167,9 +167,10 @@ export const KineticLyrics: React.FC<{ lines: Line[]; at: number; beat: Beat; ho
               position: "relative",
               display: "inline-block",
               fontFamily: font,
+              fontWeight: weightOf(font),
               fontSize: size,
-              color: isHot ? C.gold : C.paperLight,
-              textShadow: `${outline(4, C.ink)}, 7px 8px 0 ${C.red}`,
+              color: isHot ? C.accent : C.surfaceLight,
+              textShadow: `${outline(4, C.ink)}, 7px 8px 0 ${C.signal}`,
               opacity: shown ? 1 : 0,
               transform: `translateY(${(1 - p) * 40}px) scale(${0.3 + 0.7 * p}) rotate(${tilt * (2 - p)}deg)`,
               transformOrigin: "50% 80%",
@@ -178,7 +179,7 @@ export const KineticLyrics: React.FC<{ lines: Line[]; at: number; beat: Beat; ho
             {w}
             {shown && isHot && burst < 1 && (
               <svg width={80} height={80} viewBox="-40 -40 80 80" style={{ position: "absolute", right: -34, top: -26, overflow: "visible", opacity: 1 - burst }}>
-                <path d={sparklePath(10 + 26 * Math.sin(burst * Math.PI))} fill={C.paperLight} stroke={C.ink} strokeWidth={2.5} />
+                <path d={sparklePath(10 + 26 * Math.sin(burst * Math.PI))} fill={C.surfaceLight} stroke={C.ink} strokeWidth={2.5} />
               </svg>
             )}
           </span>
@@ -207,7 +208,7 @@ export const Glitter: React.FC<{ seed: string; n?: number; at: number; beat: Bea
         const tw = 0.35 + 0.65 * Math.abs(Math.sin(ph + f * (0.05 + rand(`${seed}s${i}`) * 0.06)));
         const r = r0 * tw * (0.8 + 0.45 * pulse);
         const gold = i % 3 === 0;
-        return <path key={i} d={sparklePath(r)} transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`} fill={gold ? C.gold : C.paperLight} stroke={C.ink} strokeWidth={2} />;
+        return <path key={i} d={sparklePath(r)} transform={`translate(${x.toFixed(1)} ${y.toFixed(1)})`} fill={gold ? C.accent : C.surfaceLight} stroke={C.ink} strokeWidth={2} />;
       })}
     </svg>
   );
@@ -223,17 +224,17 @@ export const TestCard: React.FC<{ text: string }> = ({ text }) => {
   const cx = W / 2;
   const cy = H / 2;
   const R = 300;
-  const steps = [C.paperLight, C.paper, C.paperDark, C.band, C.ochre, C.navy, C.ink];
+  const steps = [C.surfaceLight, C.surface, C.surfaceDark, C.band, C.accentDark, C.primary, C.ink];
   const hum = ((f * 4) % (H + 240)) - 120; // a slow rolling hum bar
   return (
-    <AbsoluteFill style={{ background: C.navy }}>
+    <AbsoluteFill style={{ background: C.primary }}>
       <svg width={W} height={H} style={{ position: "absolute", inset: 0 }}>
         {/* grid */}
         {Array.from({ length: 19 }, (_, i) => (
-          <line key={`v${i}`} x1={i * 100} y1={0} x2={i * 100} y2={H} stroke={C.navyDeep} strokeWidth={3} />
+          <line key={`v${i}`} x1={i * 100} y1={0} x2={i * 100} y2={H} stroke={C.backdrop} strokeWidth={3} />
         ))}
         {Array.from({ length: 8 }, (_, i) => (
-          <line key={`h${i}`} x1={0} y1={cy + (i - 3.5) * 100} x2={W} y2={cy + (i - 3.5) * 100} stroke={C.navyDeep} strokeWidth={3} />
+          <line key={`h${i}`} x1={0} y1={cy + (i - 3.5) * 100} x2={W} y2={cy + (i - 3.5) * 100} stroke={C.backdrop} strokeWidth={3} />
         ))}
         {/* corner circles */}
         {[
@@ -243,7 +244,7 @@ export const TestCard: React.FC<{ text: string }> = ({ text }) => {
           [W - 150, H - 130],
         ].map(([x, y], i) => (
           <g key={i}>
-            <circle cx={x} cy={y} r={92} fill={C.paperDark} stroke={C.ink} strokeWidth={5} />
+            <circle cx={x} cy={y} r={92} fill={C.surfaceDark} stroke={C.ink} strokeWidth={5} />
             <circle cx={x} cy={y} r={58} fill="none" stroke={C.ink} strokeWidth={4} />
             <circle cx={x} cy={y} r={24} fill={C.ink} />
           </g>
@@ -252,7 +253,7 @@ export const TestCard: React.FC<{ text: string }> = ({ text }) => {
         {Array.from({ length: 9 }, (_, i) => {
           const d = (i - 4) * 14;
           return (
-            <g key={`w${i}`} stroke={C.paperLight} strokeWidth={3}>
+            <g key={`w${i}`} stroke={C.surfaceLight} strokeWidth={3}>
               <line x1={cx + d} y1={0} x2={cx} y2={cy - R * 0.55} />
               <line x1={cx + d} y1={H} x2={cx} y2={cy + R * 0.55} />
               <line x1={0} y1={cy + d} x2={cx - R * 0.55} y2={cy} />
@@ -262,7 +263,7 @@ export const TestCard: React.FC<{ text: string }> = ({ text }) => {
         })}
         {/* the big circle */}
         <circle cx={cx} cy={cy} r={R + 18} fill={C.ink} />
-        <circle cx={cx} cy={cy} r={R} fill={C.paper} stroke={C.paperLight} strokeWidth={6} />
+        <circle cx={cx} cy={cy} r={R} fill={C.surface} stroke={C.surfaceLight} strokeWidth={6} />
         <circle cx={cx} cy={cy} r={R * 0.72} fill="none" stroke={C.ink} strokeWidth={4} />
         <circle cx={cx} cy={cy} r={R * 0.42} fill="none" stroke={C.ink} strokeWidth={3} />
         <line x1={cx - R} y1={cy} x2={cx + R} y2={cy} stroke={C.ink} strokeWidth={3} />
@@ -278,7 +279,7 @@ export const TestCard: React.FC<{ text: string }> = ({ text }) => {
         </g>
         {/* starburst crown, a googie touch */}
         <g transform={`translate(${cx} ${cy - R * 0.72})`}>
-          <path d={starburstPath(46, 12, 0.45)} fill={C.gold} stroke={C.ink} strokeWidth={4} />
+          <path d={starburstPath(46, 12, 0.45)} fill={C.accent} stroke={C.ink} strokeWidth={4} />
         </g>
       </svg>
       {/* station ident bar */}
@@ -289,15 +290,15 @@ export const TestCard: React.FC<{ text: string }> = ({ text }) => {
           width: 960,
           top: cy - 62,
           height: 124,
-          background: C.navyDeep,
-          border: `6px solid ${C.paperLight}`,
+          background: C.backdrop,
+          border: `6px solid ${C.surfaceLight}`,
           borderRadius: 18,
           boxSizing: "border-box",
           display: "grid",
           placeItems: "center",
-          fontFamily: DISPLAY,
+          ...DISPLAY_FONT,
           fontSize: 64,
-          color: C.paperLight,
+          color: C.surfaceLight,
           letterSpacing: "0.02em",
           textShadow: `4px 4px 0 ${C.ink}`,
         }}
@@ -305,7 +306,7 @@ export const TestCard: React.FC<{ text: string }> = ({ text }) => {
         {text}
       </div>
       {/* rolling hum bar + a faint flicker */}
-      <div style={{ position: "absolute", left: 0, width: W, top: hum, height: 120, background: C.navyDeep, opacity: 0.18 }} />
+      <div style={{ position: "absolute", left: 0, width: W, top: hum, height: 120, background: C.backdrop, opacity: 0.18 }} />
       <AbsoluteFill style={{ background: C.ink, opacity: 0.03 + rand(`tcf${f}`) * 0.04 }} />
     </AbsoluteFill>
   );
@@ -343,7 +344,7 @@ export const CommercialBreak: React.FC<{
   return (
     <Card
       titleNode={
-        <div style={{ fontFamily: SCRIPT, fontSize: sloganSize, color: C.red, lineHeight: 1, whiteSpace: "nowrap", textShadow: `3px 3px 0 ${C.ink}` }}>{slogan}</div>
+        <div style={{ fontFamily: SCRIPT, fontWeight: SCRIPT_WEIGHT, fontSize: sloganSize, color: C.signal, lineHeight: 1, whiteSpace: "nowrap", textShadow: `3px 3px 0 ${C.ink}` }}>{slogan}</div>
       }
       kicker={kicker}
       img={img}
@@ -355,7 +356,7 @@ export const CommercialBreak: React.FC<{
       {f >= at && (
         <>
           {/* a band of shade so the sung words read over any picture */}
-          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 300, background: `linear-gradient(to top, ${C.navyDeep}d9, ${C.navyDeep}00)` }} />
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 300, background: `linear-gradient(to top, ${C.backdrop}d9, ${C.backdrop}00)` }} />
           <Glitter seed={img ?? "break"} at={at} beat={beat} avoid={{ y0: 470 }} />
           {children}
           <KineticLyrics lines={lines} at={at} beat={beat} hot={hot} />
@@ -382,8 +383,8 @@ export const CommercialBreak: React.FC<{
             width: WIN.w * line,
             top: WIN.h / 2 - 3,
             height: 6,
-            background: C.paperLight,
-            boxShadow: `0 0 24px 8px ${C.paperLight}`,
+            background: C.surfaceLight,
+            boxShadow: `0 0 24px 8px ${C.surfaceLight}`,
           }}
         />
       )}

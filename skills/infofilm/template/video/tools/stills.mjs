@@ -21,7 +21,10 @@ const serveUrl = await bundle({ entryPoint: path.resolve("src/index.ts"), enable
 // a day of stills fills the disk (2026-10-02: 326 leftover bundles = 28 GB)
 const cleanup = () => rmSync(serveUrl, { recursive: true, force: true });
 process.on("exit", cleanup);
-const composition = await selectComposition({ serveUrl, id });
+// BROWSER_EXECUTABLE (+ CHROME_MODE=chrome-for-testing for a full Chrome) uses an installed browser
+// instead of Remotion's download, e.g. in a sandbox without access to remotion.media
+const browser = { browserExecutable: process.env.BROWSER_EXECUTABLE ?? null, chromeMode: process.env.CHROME_MODE ?? "headless-shell" };
+const composition = await selectComposition({ serveUrl, id, ...browser });
 const files = [];
 const done = []; // frame numbers that rendered (labels)
 // report missing cues seen while rendering
@@ -33,7 +36,7 @@ for (const frame of frames) {
   const f = Math.min(frame, composition.durationInFrames - 1);
   const output = path.join(out, `${id}_${f}.png`);
   try {
-    await renderStill({ serveUrl, composition, frame: f, output, overwrite: true, logLevel: "error", onBrowserLog });
+    await renderStill({ serveUrl, composition, frame: f, output, overwrite: true, logLevel: "error", onBrowserLog, ...browser });
     files.push(output);
     done.push(f);
   } catch (e) {

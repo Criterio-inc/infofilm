@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="80" viewBox="0 0 360 80">
+  <!-- placeholder: replace with the client's logo (SVG or a transparent PNG) -->
+  <rect x="2" y="2" width="76" height="76" rx="16" fill="#1e9bd7"/>
+  <path d="M22 54 L40 22 L58 54 Z" fill="#ffffff"/>
+  <text x="96" y="54" font-family="Arial, Helvetica, sans-serif" font-size="36" font-weight="700" fill="#ffffff">KUNDLOGGA</text>
+</svg>
