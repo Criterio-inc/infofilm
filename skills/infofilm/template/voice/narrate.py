@@ -86,6 +86,8 @@ def main(argv):
     if dry or not todo:
         return
 
+    if "PUT-YOUR" in voice:
+        sys.exit("no narrator chosen yet: design a voice (voice/design_voice.py) or put a voice id in voice/voice.json")
     from elevenlabs import ElevenLabs
     client = ElevenLabs(api_key=os.environ["ELEVENLABS_API_KEY"])
     before = credits(client)

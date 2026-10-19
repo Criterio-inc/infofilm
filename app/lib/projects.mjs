@@ -51,9 +51,19 @@ export function designLinks(input, current = []) {
   return urls.map((url) => known.get(url) || { url });
 }
 
-/** The folders among a profile's or film's design systems, with ~ expanded (Claude may read them). */
+/** The folders among a profile's or film's design systems, with ~ expanded (Claude may read them). Only
+ * real project folders: at least two levels inside the home folder and none of its hidden folders, so a
+ * stray "~" or "/Users" never opens the whole disk to Claude. */
 export const designFolders = (list) =>
-  (list || []).map((d) => (typeof d === "string" ? d : d?.url)).filter((u) => /^(~|\/)/.test(u || "")).map((u) => (u.startsWith("~") ? path.join(os.homedir(), u.slice(1)) : u)).filter((p) => existsSync(p));
+  (list || [])
+    .map((d) => (typeof d === "string" ? d : d?.url))
+    .filter((u) => /^(~|\/)/.test(u || ""))
+    .map((u) => path.resolve(u.startsWith("~") ? path.join(os.homedir(), u.slice(1)) : u))
+    .filter((p) => {
+      const rel = path.relative(os.homedir(), p);
+      return rel && !rel.startsWith("..") && !path.isAbsolute(rel) && rel.split(path.sep).length >= 2 && !rel.split(path.sep).some((s) => s.startsWith("."));
+    })
+    .filter((p) => existsSync(p) && statSync(p).isDirectory());
 
 /** The project folder for an id, or a 404. Ids are folder names directly under the films folder. */
 export function projectDir(id) {
@@ -119,7 +129,9 @@ function steps(s) {
     review: s.scenesBuilt && Boolean(s.preview) && ok("review"),
   };
   // the finished films count once everything before them is done, and only if made after the last change
-  done.deliver = done.script && done.voice && done.images && done.review && s.renders.length > 0 && s.renders[0].mtime >= s.timelineMtime;
+  // …and every format of the film has a render made after the last change
+  const fresh = s.renders.filter((r) => r.mtime >= s.timelineMtime).length;
+  done.deliver = done.script && done.voice && done.images && done.review && fresh >= (s.formats || ["16:9"]).length;
   const list = Object.keys(STEP_NAMES).map((key) => ({ key, label: STEP_NAMES[key], done: done[key] }));
   const current = list.find((x) => !x.done)?.key || "done";
   return { list, current };
@@ -144,6 +156,39 @@ function changedAt(dir) {
     return Math.max(0, ...readdirSync(p).filter((n) => !n.startsWith(".") && !skip.has(n)).map((n) => newest(path.join(p, n))));
   };
   return Math.max(...["script", "film.json", "brand", "art/img", "art/shots.json", "voice/scenes", "voice/voice.json", "music/cuts.json", "music/suno", "video/src"].map((r) => newest(path.join(dir, r))));
+}
+
+/** What differs between the film's copy of its sender's profile (brand/, art/style.json) and the profile
+ * as it is now, in words for the page. The film's formats, language, music choice and voice stay the film's. */
+export function profileDiff(id) {
+  const dir = projectDir(id);
+  const film = readJson(path.join(dir, "film.json"), {});
+  let pdir;
+  try {
+    pdir = profileDir(film.profile);
+  } catch {
+    return { profile: film.profile || "", missing: true, changes: [] };
+  }
+  const a = readJson(path.join(dir, "brand/profile.json"), {});
+  const b = readJson(path.join(pdir, "profile.json"), {});
+  const same = (x, y) => JSON.stringify(x ?? null) === JSON.stringify(y ?? null);
+  const changes = [];
+  const roles = [...new Set([...Object.keys(a.palette || {}), ...Object.keys(b.palette || {})])].filter((r) => !same(a.palette?.[r], b.palette?.[r]));
+  if (roles.length) changes.push(`Färger: ${roles.slice(0, 6).map((r) => `${r} ${a.palette?.[r] || "–"} → ${b.palette?.[r] || "–"}`).join(", ")}${roles.length > 6 ? ` och ${roles.length - 6} till` : ""}`);
+  for (const [role, label] of [["display", "Rubriktypsnitt"], ["ui", "Texttypsnitt"], ["mono", "Etikettypsnitt"]]) {
+    const fa = a.fonts?.[role], fb = b.fonts?.[role];
+    if (!same(fa, fb)) changes.push(`${label}: ${fa?.family || "–"} → ${fb?.family || "–"}${fb?.files?.length ? ` (${fb.files.length} egna filer)` : ""}`);
+  }
+  const logoA = a.logo?.file && path.join(dir, "brand", a.logo.file);
+  const logoB = b.logo?.file && path.join(pdir, b.logo.file);
+  const bytes = (f) => (f && existsSync(f) ? readFileSync(f) : null);
+  if (!same(a.logo, b.logo) || (logoA && logoB && !bytes(logoA)?.equals(bytes(logoB) || Buffer.alloc(0)))) changes.push("Logga");
+  const parts = { name: "Namn", kicker: "Kicker", card: "Kortets form", plate: "Plattornas form", motion: "Rörelse", backdrop: "Bakgrund", ground: "Bakgrund utan bild", filmLook: "Filmkorn", endCard: "Slutkortet", designSystems: "Designsystem" };
+  for (const [k, label] of Object.entries(parts)) if (!same(a[k], b[k])) changes.push(label);
+  const sa = readJson(path.join(dir, "art/style.json"), {}), sb = readJson(path.join(pdir, "style.json"), {});
+  if (!same(sa.ink, sb.ink) || !same(sa.never, sb.never)) changes.push("Bildstil (gäller nya bilder, befintliga görs inte om)");
+  if (read(path.join(dir, "brand/NOTES.md"), "") !== read(path.join(pdir, "NOTES.md"), "")) changes.push("Tonalitet och regler (NOTES.md)");
+  return { profile: film.profile, name: b.name || film.profile, changes };
 }
 
 const mtime = (f) => (existsSync(f) ? statSync(f).mtimeMs : 0);
@@ -172,7 +217,8 @@ export function summary(id) {
     demo: /^status:\s*demo/m.test(script),
     scenes: scenes.length,
     seconds: tl ? Math.round(tl.durationInFrames / (tl.fps || 30)) : 0,
-    narrated: scenes.filter((x) => !x.estimated).length,
+    // a scene without words (a silent card) has nothing to narrate
+    narrated: scenes.filter((x) => !x.estimated || !String(x.text || "").trim()).length,
     // the built-in end card needs no illustration
     illustrated: scenes.filter((x) => x.name !== "end-card").length,
     images: scenes.filter((x) => x.img && x.name !== "end-card").length,
@@ -184,6 +230,16 @@ export function summary(id) {
     // when the film last really changed: the timeline file itself is rebuilt by every render and preview
     timelineMtime: changedAt(dir),
     scenesBuilt: scenesBuilt(dir, scenes),
+    // the sender's profile was edited after it was put into this film (brand/PROFILE is written then)
+    profileNewer: (() => {
+      try {
+        const pdir = profileDir(film.profile);
+        const newest = Math.max(...["profile.json", "style.json", "NOTES.md", "logo.svg", "logo.png", "fonts", "design-systems"].map((f) => mtime(path.join(pdir, f))));
+        return newest > mtime(path.join(dir, "brand/PROFILE")) + 1000;
+      } catch {
+        return false;
+      }
+    })(),
     preview: existsSync(preview) ? { path: path.relative(dir, preview), mtime: mtime(preview) } : null,
     modified: Math.max(statSync(path.join(dir, "film.json")).mtimeMs, ...renders.map((r) => r.mtime), existsSync(path.join(dir, "video/src/timeline/master.json")) ? statSync(path.join(dir, "video/src/timeline/master.json")).mtimeMs : 0),
   };
@@ -270,7 +326,7 @@ export function detail(id) {
         }
         return [...own, ...fromProfile];
       })(),
-      bed: Object.values(readJson(path.join(dir, "film.json"), {}).parts || {}).map((x) => x.bed).find((b) => b) || "",
+      bed: ((fj) => ("bed" in fj ? fj.bed : Object.values(fj.parts || {}).map((x) => x.bed).find((b) => b)) || "")(readJson(path.join(dir, "film.json"), {})),
     },
     claudeSession: app.claudeSession || null,
     claudeLast: app.claudeLast || null,

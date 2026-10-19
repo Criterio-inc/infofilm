@@ -5,7 +5,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statS
 import path from "node:path";
 import { claudeStep } from "./claude.mjs";
 import { HOME_DIR, SKILL_DIR, loadConfig } from "./config.mjs";
-import { startJob } from "./jobs.mjs";
+import { lockJob, runningJob, startJob, unlockJob } from "./jobs.mjs";
 import { SAFE_ID, defaultLoop, designLinks, listProfiles, musicLoops } from "./projects.mjs";
 
 const PREVIEW = path.join(HOME_DIR, "preview");
@@ -14,6 +14,15 @@ const readJson = (f, fb = null) => {
     return JSON.parse(readFileSync(f, "utf8"));
   } catch {
     return fb;
+  }
+};
+/** cuts.json for writing: {} when absent, an error when present but unreadable (never drop its entries). */
+const cutsFor = (f) => {
+  if (!existsSync(f)) return {};
+  try {
+    return JSON.parse(readFileSync(f, "utf8"));
+  } catch {
+    throw err(`${f} går inte att läsa: rätta eller ta bort filen först`, 500);
   }
 };
 const readText = (f) => (existsSync(f) ? readFileSync(f, "utf8") : "");
@@ -58,7 +67,7 @@ export function readProfile(id) {
   for (const fmt of formats) {
     const rel = `out/stills-${fmt.replace(":", "x")}/review`;
     const dir = path.join(PREVIEW, rel);
-    if (app.previewOf === id && existsSync(dir))
+    if (readText(path.join(PREVIEW, ".profile")).trim() === id && existsSync(dir))
       stills[fmt] = readdirSync(dir).filter((f) => f.endsWith("_review.jpg")).sort().map((f) => ({ path: `${rel}/${f}`, mtime: statSync(path.join(dir, f)).mtimeMs }));
   }
   return {
@@ -80,6 +89,28 @@ export function readProfile(id) {
     claudeSession: app.claudeSession || null,
     claudeLast: app.claudeLast || null,
   };
+}
+
+// a font file's weight from its name: "BrandSans-SemiBold.woff2" → 600
+const WEIGHTS = [[/hairline|thin/i, 100], [/extra-?light|ultra-?light/i, 200], [/light/i, 300], [/medium/i, 500], [/semi-?bold|demi-?bold/i, 600], [/extra-?bold|ultra-?bold/i, 800], [/black|heavy/i, 900], [/bold/i, 700]];
+export const fontWeight = (name) => WEIGHTS.find(([re]) => re.test(name))?.[1] ?? 400;
+
+/** The client's own font files (fonts/*.woff2|woff|ttf|otf, not the Google folder) wired into every role that
+ * uses its own files (google: false), with a weight from each name; a weight set earlier is kept. */
+function wireFonts(d) {
+  const f = path.join(d, "profile.json");
+  const prof = readJson(f, {});
+  const own = files(d, "fonts").filter((x) => /\.(woff2?|ttf|otf)$/i.test(x.name));
+  let changed = false;
+  for (const role of ["display", "ui"]) {
+    const spec = prof.fonts?.[role];
+    if (!spec || spec.google !== false) continue;
+    const before = JSON.stringify(spec.files || []);
+    spec.files = own.map((x) => ({ file: x.path, weight: (spec.files || []).find((e) => e.file === x.path)?.weight ?? fontWeight(x.name) }));
+    if (JSON.stringify(spec.files) !== before) changed = true;
+  }
+  if (changed) writeJson(f, prof);
+  return changed;
 }
 
 /** Save what the profile page edits. Each part is optional; only what is sent changes. */
@@ -104,6 +135,8 @@ export function saveProfile(id, b) {
     writeJson(f, next);
     fontsChanged = JSON.stringify(next.fonts || {}) !== before;
   }
+  // a role switched to the client's own files gets the uploaded files
+  if (b.profile?.fonts) wireFonts(d);
   if (b.style) {
     const f = path.join(d, "style.json");
     writeJson(f, { ...readJson(f, {}), ...b.style });
@@ -122,9 +155,10 @@ export function saveProfile(id, b) {
     const f = path.join(d, "profile.json");
     const cur = readJson(f, {});
     if ("loop" in b.music) writeJson(f, { ...cur, music: { ...(cur.music || {}), bed: b.music.loop || null } });
-    if (b.music.labels) {
-      const cf = path.join(d, "music/cuts.json");
-      const cuts = readJson(cf, {});
+    // the loops' names, when the profile has loops (a new profile has no music folder yet)
+    const cf = path.join(d, "music/cuts.json");
+    if (b.music.labels && Object.keys(b.music.labels).length && existsSync(cf)) {
+      const cuts = cutsFor(cf);
       for (const [k, label] of Object.entries(b.music.labels)) if (cuts[k]) cuts[k].label = String(label).slice(0, 40) || k;
       writeJson(cf, cuts);
     }
@@ -159,12 +193,13 @@ export function upload(id, { kind, name, data }) {
   if (kind === "music") {
     // a new background loop: its key is bed-<name>, its label the file's name; films find it in music/suno/
     const cf = path.join(dir, "cuts.json");
-    const cuts = readJson(cf, {});
+    const cuts = cutsFor(cf);
     const stem = path.parse(fileName).name;
     const key = "bed-" + stem.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
     cuts[key] = { file: `suno/${fileName}`, label: stem.replace(/[-_]+/g, " ") };
     writeJson(cf, cuts);
   }
+  if (kind === "font") wireFonts(d);
   if (kind === "logo") {
     const f = path.join(d, "profile.json");
     const cur = readJson(f, {});
@@ -177,12 +212,15 @@ export function removeFile(id, rel) {
   if (!/^(material|img|fonts|music)\/[^/]+$/.test(rel || "") || rel.includes("..") || rel === "music/cuts.json") throw err("kan inte ta bort den filen");
   const d = writableDir(id);
   rmSync(path.join(d, rel), { force: true });
+  if (rel.startsWith("fonts/")) wireFonts(d);
   if (rel.startsWith("music/")) {
     // the loop goes from cuts.json too, and stops being the default
     const cf = path.join(d, "music/cuts.json");
-    const cuts = readJson(cf, {});
-    for (const [k, c] of Object.entries(cuts)) if (c?.file && path.basename(c.file) === path.basename(rel)) delete cuts[k];
-    writeJson(cf, cuts);
+    if (existsSync(cf)) {
+      const cuts = cutsFor(cf);
+      for (const [k, c] of Object.entries(cuts)) if (c?.file && path.basename(c.file) === path.basename(rel)) delete cuts[k];
+      writeJson(cf, cuts);
+    }
   }
 }
 
@@ -235,6 +273,9 @@ function templateStamp(dir = path.join(SKILL_DIR, "template")) {
 const SYNC_PROMPT =
   "Synka avsändarens designsystem in i profilen. Läs skillens profiles/README.md, avsnittet \"Design systems\". Läs varje länk i \"designSystems\" i profile.json: med verktyget Artifact (action read) om det är en claude.ai-länk, annars med WebFetch. Spara det du läste som en ögonblicksbild i design-systems/<kortnamn>.md (tokens med värden, typografi, form, bildspråk och tonalitet, och länken och datumet överst) och peka på den med \"file\" på länken. Mappa designsystemets tokens till profilens roller: färger till palette, typsnitt till fonts, hörnradie, kantlinjer och skuggor till card och plate, och bildspråk eller tonalitet till style.json och NOTES.md. Gissa inget: det som inte framgår skriver du som en fråga sist i NOTES.md. Skriv namnet, dagens datum (syncedAt) och ögonblicksbildens sökväg (file) på varje länk i designSystems, och en tabell i NOTES.md under \"Designsystem\" som visar vilken token som blev vilken roll och vad som skiljer mot hur profilen såg ut förut. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Har typsnitten ändrats, kör python3 <skill>/template/tools/fetch_fonts.py . Avsluta med en kort sammanfattning av vad som ändrades.";
 
+const lockPreview = (job) => lockJob("preview", job);
+const releasePreview = () => unlockJob("preview");
+
 /** Test stills: one small preview film (made once), switched to this profile, stills per format. */
 export function previewProfile(id) {
   const p = find(id);
@@ -243,10 +284,15 @@ export function previewProfile(id) {
   const steps = [];
   if (!existsSync(path.join(p.dir, "fonts/google.json")))
     steps.push({ label: "Typsnitt", cmd: "python3", args: [path.join(SKILL_DIR, "template/tools/fetch_fonts.py"), p.dir], cwd: p.dir });
-  // the test film is made once, and made again when the skill's template has changed since
+  // one test film for all profiles: one preview at a time
+  const other = runningJob("preview");
+  if (other) throw err("testbilder görs redan för en annan avsändare, vänta tills de är klara", 409);
+  // made once, and made again when the skill's template has changed or an earlier attempt broke off
   const stamp = String(templateStamp());
   const stampFile = path.join(PREVIEW, ".template-stamp");
-  if (existsSync(PREVIEW) && readText(stampFile).trim() !== stamp) rmSync(PREVIEW, { recursive: true, force: true });
+  const broken = !existsSync(path.join(PREVIEW, "video/node_modules")) || readText(stampFile).trim() !== stamp;
+  if (existsSync(PREVIEW) && broken) rmSync(PREVIEW, { recursive: true, force: true });
+  rmSync(path.join(PREVIEW, ".profile"), { force: true });
   if (!existsSync(path.join(PREVIEW, "film.json")))
     steps.push({ label: "Testfilm (första gången, ca en minut)", cmd: "bash", args: [path.join(SKILL_DIR, "scripts/new_film.sh"), PREVIEW, "--profile", p.dir, "--mode", "klipp", "--format", formats, "--slug", "test", "--title", "Test"], cwd: SKILL_DIR, parse: (l) => (/npm notice/.test(l) ? null : l), after: () => writeFileSync(stampFile, stamp + "\n") });
   steps.push({ label: "Profilen i testfilmen", cmd: "python3", args: [path.join(SKILL_DIR, "scripts/apply_profile.py"), p.dir, PREVIEW, "--formats", formats], cwd: PREVIEW });
@@ -262,13 +308,15 @@ export function previewProfile(id) {
       parse: (l) => (/Detected differing memory|Memory reported|docker run|lower amount/.test(l) ? null : l),
     });
   }
-  return startJob(jobKey(id), "Testbilder", steps, {
+  // the job belongs to the profile (its page shows it) and also holds the shared "preview" lock
+  const job = startJob(jobKey(id), "Testbilder", steps, {
     onDone: (j) => {
-      if (j.status !== "done") return;
-      const f = path.join(p.dir, ".infofilm-app.json");
-      writeJson(f, { ...readJson(f, {}), previewOf: id, previewAt: Date.now() });
+      releasePreview();
+      if (j.status === "done") writeFileSync(path.join(PREVIEW, ".profile"), id + "\n");
     },
   });
+  lockPreview(job);
+  return job;
 }
 
 /** Files the page may show: the profile's logo, images and material, and the preview stills. */

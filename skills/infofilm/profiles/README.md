@@ -85,6 +85,9 @@ A client may keep its look in a design system, for example one made in Claude De
 
 Then set `name`, `syncedAt` (the date) and `file` (the snapshot) on each link, write a table in `NOTES.md` that shows which token became which role and what changed, check the contrast, and run `fetch_fonts.py` when the fonts changed. A token with no role (spacing, breakpoints, component states) is left out. A role the design system does not settle keeps its value, and the question goes in `NOTES.md`.
 
+## Updating a film after the profile changed
+A film keeps the copy of the profile it was made with. To bring a later profile change into it, run `scripts/apply_profile.py <profile-dir> <film-dir> --formats <the film's formats> --keep-voice --music <the film's loop or none>` (the app's **Visa ändringarna** does this). `--keep-voice` leaves the film's narrator alone, so nothing is narrated, or billed, again.
+
 ## Assets reused across films (optional)
 | In the profile | Goes to | Use |
 |---|---|---|

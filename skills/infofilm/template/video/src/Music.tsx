@@ -44,7 +44,7 @@ const Cut: React.FC<{ cut: MusicCut; from: number; volume: (f: number) => number
         src={staticFile(cut.src)}
         startFrom={cut.inFrames}
         endAt={cut.outFrames}
-        volume={(f) => volume(f) * clampI(f, [len - cut.fadeFrames, len], [1, 0])}
+        volume={(f) => volume(f) * clampI(f, [len - Math.max(1, cut.fadeFrames), len], [1, 0])}
       />
     </Sequence>
   );
@@ -56,7 +56,7 @@ export const Music: React.FC<{ timeline: Timeline }> = ({ timeline }) => {
   const { scenes, music } = timeline;
   const end = timeline.durationInFrames;
   const out = timeline.fadeOutFrames ?? 60;
-  const ending = (abs: number) => clampI(abs, [end - out, end], [1, 0]);
+  const ending = (abs: number) => (out > 0 ? clampI(abs, [end - out, end], [1, 0]) : 1);
   // beds: one per run of scenes with the same bed key, from its first to its last scene
   const beds: { key: string; from: number; to: number }[] = [];
   for (const s of scenes) {

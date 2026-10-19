@@ -6,7 +6,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from
 import net from "node:net";
 import path from "node:path";
 import { SKILL_DIR, toolEnv } from "./config.mjs";
-import { startJob } from "./jobs.mjs";
+import { runningJob, startJob } from "./jobs.mjs";
 import { designLinks, logLine, profileDir, projectDir, saveApp, writeBrief } from "./projects.mjs";
 import { claudeStep } from "./claude.mjs";
 import { loadConfig } from "./config.mjs";
@@ -21,6 +21,9 @@ function comps(dir) {
 
 export function runAction(id, action, args = {}) {
   const dir = projectDir(id);
+  // nothing is written or logged while another job runs in the film (it would be refused anyway)
+  const busy = runningJob(id);
+  if (busy) throw Object.assign(new Error(`"${busy.title}" körs redan i det här projektet`), { status: 409 });
   const film = JSON.parse(readFileSync(path.join(dir, "film.json"), "utf8"));
   const main = (film.formats || ["16:9"])[0];
   const est = args.estimate ? ` (uppskattat: ${String(args.estimate).slice(0, 200)})` : "";
@@ -35,7 +38,8 @@ export function runAction(id, action, args = {}) {
       const steps = [build(dir, fmt), {
         label: `Stillbilder ${fmt}`,
         cmd: "node",
-        args: ["tools/review.mjs", String(args.frames || 6), ...comps(dir)],
+        // the scene list is read when the step starts, after the timeline has been rebuilt
+        args: () => ["tools/review.mjs", String(args.frames || 6), ...comps(dir)],
         cwd: path.join(dir, "video"),
         env: { STILLS_DIR: path.join(dir, "out", `stills-${fmt.replace(":", "x")}`) },
         parse: (l) => (/Detected differing memory|Memory reported|docker run|lower amount/.test(l) ? null : l.replace(dir + "/", "")),
@@ -67,6 +71,7 @@ export function runAction(id, action, args = {}) {
       return startJob(id, "Bilder: vad kostar det?", [py(dir, "gen.py --dry-run", "art/gen.py", "--dry-run")]);
 
     case "images":
+      if ((args.ids || []).some((x) => !/^film-[A-Za-z0-9_-]+$/.test(String(x)))) throw Object.assign(new Error("ogiltig bild"), { status: 400 });
       logLine(id, `godkänt i appen: illustrationer${est}`);
       return startJob(id, "Bilder: generera", [py(dir, "gen.py", "art/gen.py", ...(args.ids || [])), py(dir, "Till videon", "tools/sync_art.py"), build(dir)], {
         onDone: (j) => {
@@ -93,21 +98,34 @@ export function runAction(id, action, args = {}) {
       // the background loop for the whole film: a key from music/cuts.json, or "" for none
       const key = String(args.key || "");
       const cf = path.join(dir, "music/cuts.json");
-      const cuts = JSON.parse(readFileSync(cf, "utf8"));
+      const cuts = existsSync(cf) ? JSON.parse(readFileSync(cf, "utf8")) : {};
       if (key && !(key in cuts && existsSync(path.join(dir, "music", cuts[key].file)))) {
         // a loop the client got after this film was made: copy it in from the profile
         const pm = path.join(profileDir(film.profile), "music");
-        const pc = JSON.parse(readFileSync(path.join(pm, "cuts.json"), "utf8"))[key];
-        if (!pc || !existsSync(path.join(pm, path.basename(pc.file)))) throw Object.assign(new Error("den slingan finns inte hos avsändaren"), { status: 400 });
+        const pcf = path.join(pm, "cuts.json");
+        const pc = existsSync(pcf) ? JSON.parse(readFileSync(pcf, "utf8"))[key] : null;
+        if (!pc?.file || !existsSync(path.join(pm, path.basename(pc.file)))) throw Object.assign(new Error("den slingan finns inte hos avsändaren"), { status: 400 });
         mkdirSync(path.join(dir, "music/suno"), { recursive: true });
         copyFileSync(path.join(pm, path.basename(pc.file)), path.join(dir, "music/suno", path.basename(pc.file)));
         cuts[key] = { ...pc, file: `suno/${path.basename(pc.file)}` };
         writeFileSync(cf, JSON.stringify(cuts, null, 2) + "\n");
       }
       film.parts = Object.fromEntries(Object.entries(film.parts || {}).map(([k, v]) => [k, { ...v, bed: key }]));
+      film.bed = key; // also for parts the script names later than the template's (film mode)
       writeFileSync(path.join(dir, "film.json"), JSON.stringify(film, null, 2) + "\n");
       logLine(id, `bakgrundsmusik i appen: ${key ? cuts[key].label || key : "ingen"}`);
       return startJob(id, key ? "Musik: byt slinga" : "Musik: ingen", [build(dir)]);
+    }
+
+    case "apply-profile": {
+      // the sender's profile as it is now, into this film: its formats, language, music choice and voice stay
+      const pdir = profileDir(film.profile);
+      const bed = film.bed ?? Object.values(film.parts || {}).map((x) => x.bed).find((b) => b) ?? "";
+      const a = [path.join(SKILL_DIR, "scripts/apply_profile.py"), pdir, dir, "--formats", (film.formats || ["16:9"]).join(","), "--keep-voice", "--music", bed || "none"];
+      if (film.language) a.push("--lang", film.language);
+      if (film.locale) a.push("--locale", film.locale);
+      logLine(id, `avsändarens profil (${film.profile}) uppdaterad i filmen i appen`);
+      return startJob(id, "Uppdatera filmen med profilen", [{ label: "Profilen in i filmen", cmd: "python3", args: a, cwd: dir }, build(dir)]);
     }
 
     case "preview": {
@@ -198,7 +216,7 @@ export const PRESETS = {
   scenes: {
     label: "Bygg scenerna",
     prompt:
-      "Gör fas 7 och följ de länkade designsystemen: ta bort demoscenerna (TheYear, TheRule) och bygg filmens scener, de bärande först. Lägg siffror i data.ts med källa. Lägg ut scenerna efter WIN och WIDE så att de fungerar i alla format i film.json, och kontrollera stillbilder i varje format. Kör lint_cues och tsc. Avsluta med en rad per scen om vad som syns.",
+      "Gör fas 7 och följ de länkade designsystemen. Lägg stillbilder där appen visar dem: STILLS_DIR=../out/stills-16x9 node tools/review.mjs … från video/ (16x9 byts mot formatet, till exempel 1x1). Ta bort demoscenerna (TheYear, TheRule) och bygg filmens scener, de bärande först. Lägg siffror i data.ts med källa. Lägg ut scenerna efter WIN och WIDE så att de fungerar i alla format i film.json, och kontrollera stillbilder i varje format. Kör lint_cues och tsc. Avsluta med en rad per scen om vad som syns.",
   },
   music: {
     label: "Musikprompt",
@@ -208,7 +226,7 @@ export const PRESETS = {
   review: {
     label: "Granska scenerna",
     prompt:
-      "Granska varje scen med node tools/review.mjs 6 <alla scener> (från video/) i huvudformatet och, om filmen har fler format, i dem också. Rätta det som är klippt, överlappar, landar fel eller är svårläst. Avsluta med vad du ändrade.",
+      "Granska varje scen med STILLS_DIR=../out/stills-16x9 node tools/review.mjs 6 <alla scener> (från video/; 16x9 byts mot formatet) i huvudformatet och, om filmen har fler format, i dem också. Rätta det som är klippt, överlappar, landar fel eller är svårläst. Avsluta med vad du ändrade.",
   },
 };
 
@@ -230,6 +248,7 @@ export async function startStudio(id) {
   const child = spawn("npx", ["remotion", "studio", "src/index.ts", "--port", String(port), "--no-open"], { cwd: path.join(dir, "video"), env: toolEnv(), stdio: "ignore" });
   studios.set(id, { child, port });
   child.on("close", () => studios.delete(id));
+  child.on("error", () => studios.delete(id));
   // wait until it answers, at most 60 s
   for (let i = 0; i < 120; i++) {
     const ok = await new Promise((r) => {
@@ -255,6 +274,8 @@ export const stopStudios = () => [...studios.keys()].forEach(stopStudio);
  * background choice. It is chosen right away, since that is why it was added. */
 export function uploadAudio(id, { name, data }) {
   const dir = projectDir(id);
+  const busy = runningJob(id);
+  if (busy) throw Object.assign(new Error(`"${busy.title}" körs redan i det här projektet`), { status: 409 });
   const safe = String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+/, "");
   if (!/\.(wav|mp3|m4a|aiff?|flac)$/i.test(safe)) throw Object.assign(new Error("ljudet ska vara WAV, MP3, M4A, AIFF eller FLAC"), { status: 400 });
   mkdirSync(path.join(dir, "music/suno"), { recursive: true });
@@ -287,8 +308,9 @@ export function revealFile(id, rel) {
   else spawn("xdg-open", [path.dirname(f)], { stdio: "ignore", detached: true }).unref();
 }
 
-/** Open a folder in Finder (macOS) or the file manager. */
+/** Open a folder of the project in Finder (macOS) or the file manager: only the project and its known folders. */
 export function reveal(id, sub = "") {
+  if (!/^(out|music|voice|art|script|notes|brand|video)?$/.test(String(sub))) throw Object.assign(new Error("kan inte visa den mappen"), { status: 400 });
   const dir = path.join(projectDir(id), sub);
   const cmd = process.platform === "darwin" ? "open" : "xdg-open";
   spawn(cmd, [existsSync(dir) ? dir : projectDir(id)], { stdio: "ignore", detached: true }).unref();

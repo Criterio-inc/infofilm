@@ -26,6 +26,8 @@ export function loadConfig() {
   const c = { filmsDir: "~/Filmer", profilesDir: "", port: 4747, browserExecutable: "", ...readJson(CONFIG, {}) };
   // client profiles live outside the repo (no client material on GitHub, no clash with git pull)
   if (!c.profilesDir) c.profilesDir = "~/Kundprofiler";
+  // an emptied field means the default, never the app's own folder
+  if (!String(c.filmsDir || "").trim()) c.filmsDir = "~/Filmer";
   return { ...c, filmsPath: path.resolve(expand(c.filmsDir)), profilesPath: path.resolve(expand(c.profilesDir)) };
 }
 
@@ -91,7 +93,11 @@ export function saveSecrets(patch) {
     const v = patch[k].trim();
     if (MAC) {
       // the keychain holds it; the old plain-text copy goes
-      if (v) execFileSync("security", ["add-generic-password", "-U", "-s", KEYCHAIN, "-a", k, "-l", `Infofilm ${k}`, "-w", v], { stdio: "ignore" });
+      // the key goes in on stdin (security -i), never as an argument that ps could show
+      if (v) {
+        if (!/^[A-Za-z0-9_.:-]+$/.test(v)) throw Object.assign(new Error("nyckeln innehåller tecken som inte hör hemma i en API-nyckel"), { status: 400 });
+        execFileSync("security", ["-i"], { input: `add-generic-password -U -s ${KEYCHAIN} -a ${k} -l "Infofilm ${k}" -w "${v}"\n`, stdio: ["pipe", "ignore", "ignore"] });
+      }
       else {
         try {
           execFileSync("security", ["delete-generic-password", "-s", KEYCHAIN, "-a", k], { stdio: "ignore" });

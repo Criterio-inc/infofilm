@@ -47,7 +47,7 @@ export const EndCard: React.FC<{ line?: string; url?: string }> = ({ line, url }
           textAlign: "center",
         }}
       >
-        {BRAND.logo && <Img src={staticFile(BRAND.logo.src)} style={{ height: Math.round(150 * S), width: "auto", transform: `scale(${logo})` }} />}
+        {BRAND.logo && <Img src={staticFile(BRAND.logo.src)} style={{ height: Math.round(150 * S), width: "auto", maxWidth: "100%", objectFit: "contain", transform: `scale(${logo})` }} />}
         {text && (
           <div style={{ ...DISPLAY_FONT, fontSize: Math.round(64 * S), lineHeight: 1.1, color: C.bandText, opacity: lineIn }}>
             {DISPLAY_UPPER ? text.toUpperCase() : text}

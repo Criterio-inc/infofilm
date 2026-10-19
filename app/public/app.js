@@ -24,7 +24,7 @@ function ask({ title, text = "", ok = "OK", input = null, pay = false }) {
     const d = document.createElement("dialog");
     d.className = "ask";
     d.innerHTML = `<form method="dialog"><h2>${esc(title)}</h2>${text ? `<p class="muted">${esc(text)}</p>` : ""}${input != null ? `<input type="text" name="v" value="${esc(input)}">` : ""}
-      <div class="row" style="justify-content:flex-end;margin-top:14px"><button value="no" type="submit">Avbryt</button><button value="yes" type="submit" class="${pay ? "pay" : "primary"}">${esc(ok)}</button></div></form>`;
+      <div class="row" style="flex-direction:row-reverse;justify-content:flex-start;margin-top:14px"><button value="yes" type="submit" class="${pay ? "pay" : "primary"}">${esc(ok)}</button><button value="no" type="submit">Avbryt</button></div></form>`;
     document.body.appendChild(d);
     d.addEventListener("close", () => {
       const yes = d.returnValue === "yes";
@@ -75,7 +75,7 @@ async function route() {
   try {
     state = await api("state");
     if (h === "/") return await projectsPage();
-    if (h === "/new") return newPage();
+    if (h === "/new" || h.startsWith("/new?")) return newPage(new URLSearchParams(h.split("?")[1] || "").get("profile"));
     if (h === "/settings") return settingsPage();
     if (h === "/kunder") return await customersPage();
     const k = h.match(/^\/kund\/([^/]+)$/);
@@ -107,7 +107,7 @@ async function projectsPage() {
         <a class="panel card" href="#/p/${encodeURIComponent(p.id)}">
           <div class="thumb" style="${p.thumb ? `background-image:linear-gradient(transparent 50%,rgba(0,0,0,.55)),url('${fileUrl(p.id, p.thumb)}')` : `background:linear-gradient(135deg,${esc(p.palette.band || "#0b3d5c")},${esc(p.palette.accent || "#1e9bd7")})`}">${esc(p.title)}</div>
           <div class="body">
-            <div class="spread"><span class="small muted">${esc(p.profileName)} · ${modeName(p.mode)} · ${p.formats.join(" + ")}</span>
+            <div class="spread"><span class="small muted">${esc(p.profileName)} · ${modeName(p.mode)} · ${esc(p.formats.join(" + "))}</span>
             ${p.running ? `<span class="badge run">${esc(p.running.title)} …</span>` : `<span class="badge ${p.stage.key === "done" ? "done" : "next"}">${p.stage.key === "done" ? "Klar" : "Nästa: " + esc(p.stage.label)}</span>`}</div>
             ${steps(p)}
             <div class="small muted" style="margin-top:6px">${p.scenes ? `${p.scenes} scener · ${p.seconds} s` : ""} · ändrad ${ago(p.modified)}</div>
@@ -115,11 +115,12 @@ async function projectsPage() {
         </a>`).join("")}</div>`
       : `<div class="panel" style="text-align:center;padding:48px"><h2>Inga filmer än</h2><p class="muted">Börja med en avsändare, ett ämne och ett format, så tar Claude det därifrån.</p><a class="btn" href="#/new">+ Skapa din första film</a></div>`}
     </div>`;
-  if (list.some((p) => p.running)) refreshTimer = setInterval(() => location.hash.slice(1) === "/" || !location.hash ? projectsPage() : null, 5000);
+  clearInterval(refreshTimer);
+  if (list.some((p) => p.running)) refreshTimer = setInterval(() => (location.hash.slice(1) === "/" || !location.hash ? projectsPage() : null), 5000);
 }
 
 // ── new film ──
-function newPage() {
+function newPage(preselect) {
   const profiles = state.profiles.filter((p) => !p.template || p.id === "_mall");
   app.innerHTML = `
     <form class="panel stack" id="newf" style="max-width:820px;margin:0 auto">
@@ -127,7 +128,7 @@ function newPage() {
       <div>
         <label>Titel</label><input type="text" name="title" required placeholder="Budgeten på en minut">
         <label>Avsändare <span class="hint">– profilen styr färger, typsnitt, logga, bildstil och röst</span></label>
-        <select name="profile">${profiles.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${p.placeholder ? " (platshållare)" : ""}${p.template ? " – mall" : ""}</option>`).join("")}</select>
+        <select name="profile">${profiles.map((p) => `<option value="${esc(p.id)}" ${p.id === preselect ? "selected" : ""}>${esc(p.name)}${p.placeholder ? " (platshållare)" : ""}${p.template ? " – mall" : ""}</option>`).join("")}</select>
         <div class="small muted" id="profinfo" style="margin-top:6px"></div>
       </div>
       <div>
@@ -194,7 +195,7 @@ function newPage() {
       watchJob(job.id, $("#newlog"), (status) => {
         if (status === "done") location.hash = `#/p/${encodeURIComponent(id)}`;
         else {
-          $("#newstatus").textContent = "Det gick inte – se loggen.";
+          $("#newstatus").innerHTML = `Det gick inte, se loggen. Projektet finns ändå: <a href="#/p/${encodeURIComponent(id)}">öppna det</a> och be Claude titta på felet, eller välj en annan titel.`;
           f.querySelector("button[type=submit]").disabled = false;
         }
       });
@@ -242,7 +243,7 @@ async function jobText(jobId) {
 }
 
 const stepOf = (title) =>
-  /^Röst/.test(title) ? "voice" : /^Bilder|bildprompter/i.test(title) ? "images" : /Snabbförhandsvisning|Stillbilder|bygg scenerna|granska|Musikprompt|^Musik/i.test(title) ? "review"
+  /^Uppdatera filmen/.test(title) ? null : /^Röst/.test(title) ? "voice" : /^Bilder|bildprompter/i.test(title) ? "images" : /Snabbförhandsvisning|Stillbilder|bygg scenerna|granska|Musikprompt|^Musik/i.test(title) ? "review"
   : /^Rendera/.test(title) ? "deliver" : /research och manus/i.test(title) ? "script" : null;
 const kr = (n) => new Intl.NumberFormat("sv-SE").format(n);
 const list = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} och ${xs[xs.length - 1]}` : xs[0] || "");
@@ -257,7 +258,11 @@ async function projectPage(id) {
   const order = p.steps.list.map((s) => s.key);
   const before = order.slice(0, order.indexOf(view)).filter((k) => !done[k]);
   const illus = p.scenes.filter((s) => s.name !== "end-card");
-  const missingImgs = illus.filter((s) => !s.img).length;
+  // the film's own shots: one film-Sxx per illustrated scene (the template's demo shots never count)
+  const shotOf = (s) => p.shotList.find((x) => x.id === `film-${s.id}`);
+  const shotsReady = illus.length > 0 && illus.every(shotOf);
+  const missingIds = illus.filter((s) => !s.img).map((s) => `film-${s.id}`);
+  const missingImgs = missingIds.length;
   const unnarrated = p.scenes.filter((s) => !s.narrated);
   const chars = unnarrated.reduce((n, s) => n + (s.text || "").length, 0);
   const previewStale = p.preview && p.preview.mtime < p.timelineMtime;
@@ -269,7 +274,7 @@ async function projectPage(id) {
 
   // the card for the step in view: a title, what it is, the facts, one main action
   const card = { title: "", text: STEP_INTRO[view], facts: [], main: "", more: "", body: "" };
-  const pay = (action, label, what) => `<button class="primary" data-pay="${action}" data-what="${esc(what)}" ${busy ? "disabled" : ""}>${esc(label)}</button>`;
+  const pay = (action, label, what, ids) => `<button class="primary" data-pay="${action}" data-what="${esc(what)}" ${ids ? `data-ids="${esc(ids.join(","))}"` : ""} ${busy ? "disabled" : ""}>${esc(label)}</button>`;
   const run = (attrs, label, primary = true) => `<button ${primary ? 'class="primary"' : ""} ${attrs} ${busy ? "disabled" : ""}>${esc(label)}</button>`;
 
   if (view === "script") {
@@ -295,7 +300,7 @@ async function projectPage(id) {
     if (!p.voice.id && p.voice.previews.length) {
       card.title = "Välj berättarröst";
       card.text = "Lyssna på proven och välj den röst som passar. Den sparas så att du kan använda den igen.";
-      card.body = `<div class="stack">${p.voice.previews.map((v) => `<div class="row"><span class="small" style="width:90px">Prov ${v.take}</span><audio controls preload="none" src="${fileUrl(id, v.src)}" style="flex:1;min-width:180px"></audio><button data-pick="${esc(v.generated_voice_id)}" ${busy ? "disabled" : ""}>Välj</button></div>`).join("")}</div>`;
+      card.body = `<div class="stack">${p.voice.previews.map((v) => `<div class="row"><span class="small" style="width:90px">Prov ${esc(v.take)}</span><audio controls preload="none" src="${fileUrl(id, v.src)}" style="flex:1;min-width:180px"></audio><button data-pick="${esc(v.generated_voice_id)}" ${busy ? "disabled" : ""}>Välj</button></div>`).join("")}</div>`;
       card.main = pay("voice-preview", "Gör tre nya prov", "Tre nya röstprov (ElevenLabs, några hundra tecken)");
     } else if (!p.voice.id) {
       card.title = "Gör röstprov";
@@ -325,7 +330,7 @@ async function projectPage(id) {
   }
 
   if (view === "images") {
-    if (!p.shots) {
+    if (!shotsReady) {
       card.title = "Låt Claude beskriva bilderna";
       card.text = "Claude skriver en bildbeskrivning per scen i avsändarens bildstil. Du läser dem innan något kostar pengar.";
       card.facts = ["Tar någon minut", "Ingår i ditt Claude-abonnemang"];
@@ -334,8 +339,8 @@ async function projectPage(id) {
       card.title = `Skapa ${missingImgs === 1 ? "bilden" : `${missingImgs} bilder`}`;
       card.text = "Läs beskrivningarna. Vill du ändra något, skriv det i rutan nedanför innan du skapar bilderna.";
       card.facts = [`Kostar ungefär ${(missingImgs * 0.14).toFixed(2).replace(".", ",")} dollar<span data-credit="openrouter"></span>`, "Tar en till två minuter"];
-      card.body = `<div class="scenes">${p.shotList.map((s) => `<div class="scene"><div class="scene-h"><b>${esc(s.id.replace(/^film-/, "Scen "))}</b></div><p class="small">${esc(s.prompt)}</p></div>`).join("")}</div>`;
-      card.main = pay("images", card.title, `${missingImgs} illustrationer (Gemini via OpenRouter, ca 0,14 dollar styck)`);
+      card.body = `<div class="scenes">${illus.filter((s) => !s.img).map((s) => `<div class="scene"><div class="scene-h"><b>${esc(s.title || s.id)}</b></div><p class="small">${esc(shotOf(s).prompt)}</p></div>`).join("")}</div>`;
+      card.main = pay("images", card.title, `${missingImgs} illustrationer (Gemini via OpenRouter, ca 0,14 dollar styck)`, missingIds);
     } else {
       card.title = "Titta på bilderna";
       card.text = "Gör om en bild som inte blev bra. Siffror och text läggs på i nästa steg.";
@@ -392,7 +397,7 @@ async function projectPage(id) {
     const subs = p.subtitles.filter((r) => r.mtime >= p.timelineMtime);
     const fileRow = (r, what = "") => `<div class="spread small"><span><b>${esc(r.name)}</b> <span class="muted">${what || `${(r.size / 1e6).toFixed(1).replace(".", ",")} MB`} · ${ago(r.mtime)}</span></span><button class="link" data-file="out/${esc(r.name)}">Visa i Finder</button></div>`;
     card.title = fresh.length ? "Färdiga filer" : "Gör de färdiga filmerna";
-    card.text = `${p.formats.join(" och ")}, med röst, bilder, musik, jämn ljudnivå och undertexter.${fresh.length ? " Har du ändrat något gör du om filmerna." : ""}`;
+    card.text = `${esc(p.formats.join(" och "))}, med röst, bilder, musik, jämn ljudnivå och undertexter.${fresh.length ? " Har du ändrat något gör du om filmerna." : ""}`;
     card.facts = [`Tar några minuter${p.formats.length > 1 ? " per format" : ""}`, "Kostar inget"];
     card.main = run('data-act="render"', fresh.length ? "Gör filmerna igen" : "Gör de färdiga filmerna", !fresh.length);
     card.body = fresh.length
@@ -411,9 +416,10 @@ async function projectPage(id) {
   app.innerHTML = `
     <div class="stack film">
       <div class="spread">
-        <div><h1>${esc(p.title)}</h1><div class="muted">${swatch(p.palette)} ${esc(p.profileName)} · ${modeName(p.mode)} · ${p.formats.join(" och ")}${p.scenes.length ? ` · ${p.scenes.length} scener · ${p.seconds} s` : ""}</div></div>
+        <div><h1>${esc(p.title)}</h1><div class="muted">${swatch(p.palette)} ${esc(p.profileName)} · ${modeName(p.mode)} · ${esc(p.formats.join(" och "))}${p.scenes.length ? ` · ${p.scenes.length} scener · ${p.seconds} s` : ""}</div></div>
         ${p.preview ? `<button data-play>▶ Spela snabbversionen</button>` : ""}
       </div>
+      ${p.profileNewer ? `<div class="panel banner small row" style="justify-content:space-between"><span>${esc(p.profileName)}s profil har ändrats sedan den lades in i filmen.</span><button data-profile-update ${busy ? "disabled" : ""}>Visa ändringarna</button></div>` : ""}
       <div class="stepbar">${p.steps.list.map((s, i) => `<button data-view="${s.key}" class="${s.done ? "done" : ""} ${s.key === view ? "on" : ""} ${s.key === cur && !s.done ? "next" : ""}"><span class="n">${s.done ? "✓" : i + 1}</span>${esc(s.label)}</button>`).join("")}</div>
       <div class="panel stepcard">
         <div class="muted small">${view === cur && !done[view] ? "Nästa steg" : `Steg ${order.indexOf(view) + 1} · ${esc(STEP_NAMES[view])}`}</div>
@@ -439,7 +445,7 @@ async function projectPage(id) {
           <div id="techlog" class="console">${p.jobs.length ? "Välj ett jobb för att se dess logg." : "Inget har körts ännu."}</div>
           ${p.jobs.length ? `<div class="small">${p.jobs.slice(0, 10).map((j) => `<div class="spread"><button class="link" data-job="${j.id}">${esc(j.title)}</button><span class="${j.status === "done" ? "ok" : j.status === "running" ? "warn" : "bad"}">${{ done: "klart", running: "körs", failed: "misslyckades", stopped: "avbrutet" }[j.status]} · ${ago(j.started)}</span></div>`).join("")}</div>` : ""}
           ${busy ? `<div><button class="danger" data-stop="${p.running.id}">Avbryt det som körs</button></div>` : ""}
-          <div class="row">${p.formats.map((f) => `<button data-stills="${f}" ${busy ? "disabled" : ""}>Stillbilder ${f}</button>`).join("")}<button data-studio>${p.studio ? "Öppna Remotion Studio" : "Remotion Studio"}</button><button data-reveal="">Projektmappen i Finder</button></div>
+          <div class="row">${p.formats.map((f) => `<button data-stills="${f}" ${busy ? "disabled" : ""}>Stillbilder ${f}</button>`).join("")}<button data-studio>${p.studio ? "Öppna Remotion Studio" : "Remotion Studio"}</button><button data-reveal="">Projektmappen i Finder</button><button data-profile-update ${busy ? "disabled" : ""}>Uppdatera filmen med avsändarens profil</button></div>
           ${p.formats.map((f) => (Object.keys(p.stills[f] || {}).length ? `<details><summary>Stillbilder ${f}</summary><div class="sheets stack" style="margin-top:8px">${Object.entries(p.stills[f]).map(([sid, st]) => `<figure style="margin:0"><figcaption class="small muted">${esc(sid)}</figcaption><img loading="lazy" src="${fileUrl(id, st.path, st.mtime)}" alt=""></figure>`).join("")}</div></details>` : "")).join("")}
           <details><summary>Produktionslogg</summary><div class="log-md">${esc(p.log)}</div></details>
         </div>
@@ -463,6 +469,18 @@ async function projectPage(id) {
     window.scrollTo({ top: 0 });
   }));
   $("#bedsel")?.addEventListener("change", (e) => act("music", { key: e.target.value }));
+  // the sender's profile as it is now, into this film: show what changes first, then a yes
+  app.querySelectorAll("[data-profile-update]").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      const d = await api(`projects/${enc}/profile-diff`);
+      if (d.missing) return toast(`Avsändaren ${d.profile} finns inte längre`);
+      if (!d.changes.length) return toast("Filmen har redan avsändarens profil som den är nu");
+      const text = `Det här ändras i filmen:\n${d.changes.map((c) => `• ${c}`).join("\n")}\n\nFilmens format, språk, musikval och berättarröst behålls. Det kostar inget, men du gör en ny snabbversion och nya färdiga filmer efteråt.`;
+      if (await ask({ title: `Uppdatera med ${d.name}s profil?`, text, ok: "Uppdatera filmen" })) act("apply-profile");
+    } catch (e) {
+      toast(e.message);
+    }
+  }));
   app.querySelector("[data-musicprompt]")?.addEventListener("click", async () => {
     const wish = $("#musicwish")?.value.trim();
     try {
@@ -521,7 +539,8 @@ async function projectPage(id) {
   }));
   app.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => act(b.dataset.act)));
   app.querySelectorAll("[data-pay]").forEach((b) => b.addEventListener("click", async () => {
-    if (await ask({ title: "Det här kostar pengar", text: b.dataset.what, ok: "Godkänn och kör", pay: true })) act(b.dataset.pay, { estimate: b.dataset.what });
+    if (await ask({ title: "Det här kostar pengar", text: b.dataset.what, ok: "Godkänn och kör", pay: true }))
+      act(b.dataset.pay, { estimate: b.dataset.what, ...(b.dataset.ids ? { ids: b.dataset.ids.split(",") } : {}) });
   }));
   app.querySelectorAll("[data-redo]").forEach((b) => b.addEventListener("click", async () => {
     if (await ask({ title: "Gör om bilden?", text: "En ny bild kostar ungefär 0,14 dollar.", ok: "Gör om", pay: true })) act("images", { ids: [b.dataset.redo], estimate: `ny bild ${b.dataset.redo}, ca 0,14 dollar` });
@@ -567,9 +586,11 @@ async function projectPage(id) {
     reload();
   });
   app.querySelector("[data-stop]")?.addEventListener("click", (e) => api(`jobs/${e.target.dataset.stop}/stop`, { body: {} }).then(reload));
-  app.querySelectorAll("[data-job]").forEach((b) => b.addEventListener("click", () => {
+  app.querySelectorAll("[data-job]").forEach((b) => b.addEventListener("click", async () => {
     app.querySelector("details.tech").open = true;
-    watchJob(b.dataset.job, $("#techlog"));
+    const el = $("#techlog");
+    if (b.dataset.job === p.running?.id) return watchJob(b.dataset.job, el, () => reload());
+    el.textContent = (await jobText(b.dataset.job)) || "Inget i loggen.";
   }));
 
   // what is left on the paid services, next to the cost
@@ -659,11 +680,20 @@ async function customersPage() {
     </div>`;
   $("#newk").addEventListener("submit", async (e) => {
     e.preventDefault();
+    const btn = e.target.querySelector("button");
+    btn.disabled = true; // one profile per click
     try {
       const { id, job } = await api("profiles", { body: { name: e.target.name.value } });
-      watchJob(job.id, $("#newklog"), (st) => (st === "done" ? (location.hash = `#/kund/${encodeURIComponent(id)}`) : toast("Det gick inte, se loggen")));
+      watchJob(job.id, $("#newklog"), (st) => {
+        if (st === "done") location.hash = `#/kund/${encodeURIComponent(id)}`;
+        else {
+          toast("Det gick inte, se loggen");
+          btn.disabled = false;
+        }
+      });
     } catch (err) {
       toast(err.message);
+      btn.disabled = false;
     }
   });
 }
@@ -683,7 +713,11 @@ async function customerPage(id) {
   const F = P.fonts || {};
   const busy = Boolean(k.running);
   const dis = busy ? "disabled" : "";
-  const sel = (name, value, opts) => `<select name="${name}">${opts.map(([v, l]) => `<option value="${v}" ${String(value) === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  // a select that also keeps a value its options do not list (a Claude-built profile may have radius 4 or 12)
+  const sel = (name, value, opts) => {
+    const all = value != null && value !== "" && !opts.some(([v]) => v === String(value)) ? [...opts, [String(value), `${value} (nuvarande)`]] : opts;
+    return `<select name="${esc(name)}">${all.map(([v, l]) => `<option value="${esc(v)}" ${String(value) === v ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+  };
   const hex = (c) => (/^#[0-9a-f]{6}$/i.test(c || "") ? c : "#000000");
   const fontFiles = (role) => (F[role]?.files || []).map((f) => f.file);
   const logoUrl = P.logo?.file ? pfileUrl(id, P.logo.file, Date.now()) : null;
@@ -693,7 +727,7 @@ async function customerPage(id) {
     <div class="stack">
       <div class="spread">
         <div><h1>${esc(P.name || id)}</h1><div class="muted">${swatch({ band: pal.band, primary: pal.primary, accent: pal.accent, surface: pal.surfaceLight, backdrop: pal.backdrop })} ${esc(id)} · ${k.own ? "egen profil" : "inbyggd – sparas som egen kopia när du ändrar"}</div></div>
-        <div class="row"><a class="btn" href="#/kunder">← Avsändare</a><a class="btn" href="#/new">+ Ny film</a></div>
+        <div class="row"><a class="btn" href="#/kunder">← Avsändare</a><a class="btn" href="#/new?profile=${encodeURIComponent(id)}">+ Ny film</a></div>
       </div>
       ${/PLACEHOLDER/i.test(P._doc || "") ? `<div class="panel banner small"><b>Platshållare.</b> Färger, typsnitt och logga är inte avsändarens egna än. Ladda upp avsändarens material nedan och låt Claude bygga profilen, eller fyll i själv.</div>` : ""}
       <div class="cols">
@@ -725,7 +759,14 @@ async function customerPage(id) {
             </div>
             <label class="row" style="font-weight:400"><input type="checkbox" name="f_upper" ${F.display?.uppercase ? "checked" : ""}> Rubriker i versaler</label>
             <div class="row" style="margin-top:6px"><label class="btn" style="margin:0">Ladda upp typsnittsfiler<input type="file" id="fontf" accept=".woff2,.woff,.ttf,.otf" multiple hidden></label>
-              <span class="small muted">${k.fonts.length ? k.fonts.map((f) => esc(f.name)).join(", ") : "inga egna filer"}${fontFiles("display").length ? " · kopplade av Claude/profilen" : ""}</span></div>
+              <span class="small muted">${k.fonts.length ? k.fonts.map((f) => esc(f.name)).join(", ") : "inga egna filer"}</span></div>
+            ${(() => {
+              // which uploaded file each role uses, with its weight; or a nudge when files lie unused
+              const used = ["display", "ui"].filter((r) => (F[r]?.files || []).length);
+              if (used.length)
+                return `<div class="small" style="margin-top:6px">${used.map((r) => `<b>${r === "display" ? "Rubriker" : "Text"}:</b> ${F[r].files.map((x) => `${esc(x.file.replace(/^fonts\//, ""))} (${esc(x.weight)})`).join(", ")}`).join("<br>")}</div>`;
+              return k.fonts.length ? `<div class="small warn" style="margin-top:6px">Filerna används inte än. Välj Källa: Egna typsnittsfiler, skriv typsnittets namn och spara.</div>` : "";
+            })()}
           </div>
 
           <div class="section">
@@ -812,6 +853,7 @@ async function customerPage(id) {
   const reload = () => customerPage(id).catch((e) => toast(e.message));
   const base = `profiles/${encodeURIComponent(id)}`;
   const send = async (files, kind) => {
+    if (!(await saveIfDirty())) return;
     for (const file of files) {
       if (file.size > 60e6) {
         toast(`${file.name} är för stor (högst 60 MB)`);
@@ -839,20 +881,27 @@ async function customerPage(id) {
     send([...e.dataTransfer.files], "material");
   });
   app.querySelectorAll("[data-rm]").forEach((b) => b.addEventListener("click", async () => {
-    if (await ask({ title: "Ta bort filen?", text: b.dataset.rm, ok: "Ta bort" })) api(`${base}/remove`, { body: { path: b.dataset.rm } }).then(reload, (e) => toast(e.message));
+    if (await ask({ title: "Ta bort filen?", text: b.dataset.rm, ok: "Ta bort" }) && (await saveIfDirty())) api(`${base}/remove`, { body: { path: b.dataset.rm } }).then(reload, (e) => toast(e.message));
   }));
 
-  $("#kf").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const f = e.target;
-    const fd = new FormData(f);
+  // the form saves itself before anything that reloads the page (an upload, Claude, test stills),
+  // so what was typed is never lost; it sends only what the user changed where a value could be lost
+  const form = $("#kf");
+  let dirty = false;
+  form.addEventListener("input", () => (dirty = true));
+  form.addEventListener("change", () => (dirty = true));
+  const saveForm = async ({ quiet = false } = {}) => {
+    const fd = new FormData(form);
     const v = (n) => String(fd.get(n) ?? "");
-    const palette = Object.fromEntries(ROLES.map(([r]) => [r, v(`c_${r}`)]));
+    // only colours that were changed: a role that is not #rrggbb (rgba, #fff) would otherwise come back black
+    const palette = Object.fromEntries(ROLES.filter(([r]) => v(`c_${r}`).toLowerCase() !== hex(pal[r]).toLowerCase()).map(([r]) => [r, v(`c_${r}`)]));
     const weight = Number(v("f_weight"));
     const google = v("f_source") === "google";
+    const wasGoogle = !(F.display?.google === false || F.display?.files);
     const fonts = {
       display: { family: v("f_display"), uppercase: fd.has("f_upper"), ...(google ? { google: true, weights: [weight] } : { google: false, weight }) },
-      ui: { family: v("f_ui"), ...(google ? { google: true, weights: [400, 600, 700] } : { google: false }) },
+      // the text font keeps its weights unless the family or the source changed
+      ui: { family: v("f_ui"), ...(v("f_ui") !== (F.ui?.family || "") || google !== wasGoogle ? (google ? { google: true, weights: [400, 600, 700] } : { google: false }) : {}) },
     };
     // script falls back to display when not set; keep a client's display font for slogans too
     if (!F.script || F.script.family === F.display?.family) fonts.script = { ...fonts.display };
@@ -871,18 +920,29 @@ async function customerPage(id) {
       links: v("links"),
       music: { loop: v("music_default"), labels: Object.fromEntries(k.loops.map((m) => [m.key, v(`ml_${m.key}`)])) },
     };
-    if (!body.profile.formats.length) return toast("Välj minst ett standardformat");
+    if (!body.profile.formats.length) {
+      toast("Välj minst ett standardformat");
+      return false;
+    }
     try {
       const r = await api(`${base}/save`, { body });
-      toast(r.job ? "Sparat – hämtar typsnitten" : "Sparat");
+      dirty = false;
+      if (!quiet) toast(r.job ? "Sparat – hämtar typsnitten" : "Sparat");
       if (id !== "_mall" && !k.own) toast("Sparat som egen kopia bland dina profiler");
-      reload();
+      return true;
     } catch (err) {
       toast(err.message);
+      return false;
     }
+  };
+  const saveIfDirty = () => (dirty ? saveForm({ quiet: true }) : Promise.resolve(true));
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (await saveForm()) reload();
   });
 
   const claude = async (b) => {
+    if (!(await saveIfDirty())) return;
     try {
       await api(`${base}/claude`, { body: b });
       reload();
@@ -891,7 +951,7 @@ async function customerPage(id) {
     }
   };
   app.querySelector("[data-build]")?.addEventListener("click", () => {
-    if (!k.material.length && !k.links.trim() && !DS.length) return toast("Ladda upp avsändarens material eller skriv en länk först");
+    if (!k.material.length && !form.links.value.trim() && !form.design_systems.value.trim() && !DS.length) return toast("Ladda upp avsändarens material eller skriv en länk först");
     claude({ preset: "build" });
   });
   app.querySelector("[data-sync]")?.addEventListener("click", () => claude({ preset: "sync" }));
@@ -901,7 +961,7 @@ async function customerPage(id) {
     if (prompt) claude({ prompt });
   });
   app.querySelector("[data-kreset]")?.addEventListener("click", () => api(`${base}/claude-reset`, { body: {} }).then(reload));
-  app.querySelector("[data-preview]")?.addEventListener("click", () => api(`${base}/preview`, { body: {} }).then(reload, (e) => toast(e.message)));
+  app.querySelector("[data-preview]")?.addEventListener("click", async () => (await saveIfDirty()) && api(`${base}/preview`, { body: {} }).then(reload, (e) => toast(e.message)));
   app.querySelector("[data-stop]")?.addEventListener("click", (e) => api(`jobs/${e.target.dataset.stop}/stop`, { body: {} }).then(reload));
   app.querySelectorAll("[data-job]").forEach((b) => b.addEventListener("click", () => watchJob(b.dataset.job, $("#console"))));
   if (busy) watchJob(k.running.id, $("#console"), () => reload());

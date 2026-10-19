@@ -3,7 +3,7 @@
 
   apply_profile.py <profile-dir> <project-dir> [--mode klipp|film] [--formats 16:9,1:1]
                    [--slug s] [--title t] [--lang xx] [--locale xx-XX] [--design-systems url,url]
-                   [--music bed-lugn|none]
+                   [--music bed-lugn|none] [--keep-voice]
 
   profile.json, logo, fonts/, NOTES.md → brand/          (what the video reads)
   style.json                         → art/style.json  (the look of the illustrations)
@@ -14,6 +14,8 @@ film.json gets the slug, title, language, locale, mode and formats (and this fil
 links, on top of the profile's), and its parts and scene hooks
 are wired to the profile's music keys: a key without a file is simply skipped. The background loop
 (a "bed" key) is the profile's "music.bed", or --music; --music none gives a film without one.
+--keep-voice leaves the film's narrator alone (voice/design.json and voice.json): updating the look of
+a film that is already narrated must not change its voice, or every scene would be read (and billed) again.
 """
 import argparse
 import json
@@ -21,7 +23,9 @@ import shutil
 import sys
 from pathlib import Path
 
-TO_BRAND_SKIP = {"style.json", "design.json", "voice.json", "img", "music"}
+# the film's brand/ gets what the video and Claude read: not the client's raw material or the app's own state
+TO_BRAND_SKIP = {"style.json", "design.json", "voice.json", "img", "music", "material", ".infofilm-app.json"}
+FORMATS = {"16:9", "1:1", "9:16"}
 AUDIO = {".wav", ".mp3", ".m4a", ".aif", ".aiff", ".flac"}
 
 
@@ -31,6 +35,7 @@ def main():
     ap.add_argument("project")
     for k in ("mode", "formats", "slug", "title", "lang", "locale", "design-systems", "music"):
         ap.add_argument(f"--{k}", default="")
+    ap.add_argument("--keep-voice", action="store_true")
     a = ap.parse_args()
     prof_dir, proj = Path(a.profile).resolve(), Path(a.project).resolve()
     prof = json.loads((prof_dir / "profile.json").read_text(encoding="utf-8"))
@@ -40,6 +45,8 @@ def main():
     shutil.copytree(prof_dir, brand, ignore=lambda d, names: TO_BRAND_SKIP & set(names) if Path(d) == prof_dir else set())
     (brand / "PROFILE").write_text(prof_dir.name + "\n")
     for name, dst in (("style.json", "art/style.json"), ("design.json", "voice/design.json"), ("voice.json", "voice/voice.json")):
+        if a.keep_voice and name != "style.json":
+            continue
         if (prof_dir / name).exists():
             shutil.copy2(prof_dir / name, proj / dst)
     if (prof_dir / "img").is_dir():
@@ -61,6 +68,8 @@ def main():
     if mode not in ("klipp", "film"):
         sys.exit(f"--mode is klipp or film, not {mode}")
     formats = [f.strip() for f in a.formats.split(",") if f.strip()] or prof.get("formats") or film.get("formats", ["16:9"])
+    if not set(formats) <= FORMATS:
+        sys.exit(f"unknown format {', '.join(sorted(set(formats) - FORMATS))}: use 16:9, 1:1 or 9:16")
     kicker = prof.get("kicker", "")
     # parts and scene hooks are wired for a new project (or a new mode); a switch keeps the film's own
     wire = "profile" not in film or mode != film.get("mode")
@@ -78,6 +87,10 @@ def main():
     # the background loop: --music (a key, or "none"), else the profile's choice ("music": {"bed": …}, null = none)
     pm = prof.get("music") or {}
     bed = "" if a.music == "none" else a.music or (pm.get("bed") or "" if "bed" in pm else "bed")
+    if bed and bed not in cuts:
+        print(f"  note: no music '{bed}' in this profile, so the film starts without background music")
+        bed = "" if a.music else bed
+    film["bed"] = bed  # the film's loop, also for parts the script names later
     if not wire:
         if a.music:
             film["parts"] = {p: {**v, "bed": bed} for p, v in film.get("parts", {}).items()}
