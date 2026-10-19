@@ -155,6 +155,7 @@ function newPage() {
           <div><label>Syfte <span class="hint">– det tittaren ska ta med sig</span></label><input type="text" name="purpose"></div>
         </div>
         <label>Underlag <span class="hint">– länkar, siffror, källor, vad som måste med eller inte får sägas</span></label><textarea name="notes"></textarea>
+        <label>Designsystem <span class="hint">– valfritt: länkar för just den här filmen, utöver kundens (en per rad). Claude läser dem före manus, bildprompter och scener.</span></label><textarea name="designSystems" rows="2" placeholder="https://claude.ai/…"></textarea>
       </div>
       <label class="row" style="font-weight:400"><input type="checkbox" name="startClaude" checked> Låt Claude börja direkt med research och manus (kostar inget extra utöver ditt Claude-abonnemang)</label>
       <div class="row"><button class="primary" type="submit">Skapa filmen</button><span class="muted small" id="newstatus"></span></div>
@@ -167,7 +168,8 @@ function newPage() {
   };
   const prof = () => {
     const p = state.profiles.find((x) => x.id === f.profile.value);
-    $("#profinfo").innerHTML = p ? `${swatch(p.palette)} ${p.placeholder ? `<span class="warn">Profilen har platshållare för färger och logga – fyll i den innan filmen ska ut.</span>` : esc(p.language || "")}` : "";
+    const ds = p?.designSystems ? ` · ${p.designSystems === 1 ? "ett länkat designsystem" : `${p.designSystems} länkade designsystem`}` : "";
+    $("#profinfo").innerHTML = p ? `${swatch(p.palette)} ${p.placeholder ? `<span class="warn">Profilen har platshållare för färger och logga – fyll i den innan filmen ska ut.</span>` : esc(p.language || "")}${ds}` : "";
   };
   f.addEventListener("change", (e) => {
     if (e.target.name === "mode") lengths();
@@ -479,6 +481,7 @@ async function customerPage(id) {
   const hex = (c) => (/^#[0-9a-f]{6}$/i.test(c || "") ? c : "#000000");
   const fontFiles = (role) => (F[role]?.files || []).map((f) => f.file);
   const logoUrl = P.logo?.file ? pfileUrl(id, P.logo.file, Date.now()) : null;
+  const DS = (P.designSystems || []).map((d) => (typeof d === "string" ? { url: d } : d));
 
   app.innerHTML = `
     <div class="stack">
@@ -496,6 +499,9 @@ async function customerPage(id) {
             ${k.material.length ? `<table style="margin-top:8px">${k.material.map((m) => `<tr><td>${/\.(png|jpe?g|svg|gif|webp)$/i.test(m.name) ? `<img src="${pfileUrl(id, m.path)}" style="height:28px;vertical-align:middle;margin-right:8px;border-radius:4px">` : "📄 "}${esc(m.name)}</td><td class="muted small">${m.size < 1e6 ? `${Math.max(1, Math.round(m.size / 1e3))} kB` : `${(m.size / 1e6).toFixed(1)} MB`}</td><td><button type="button" class="link danger small" data-rm="${esc(m.path)}">ta bort</button></td></tr>`).join("")}</table>` : ""}
             <label>Länkar <span class="hint">– kundens webbplats, grafisk profil online, exempel (en per rad)</span></label>
             <textarea name="links" rows="2" placeholder="https://www.exempel.se">${esc(k.links)}</textarea>
+            <label>Designsystem <span class="hint">– länkar till kundens designsystem i Claude Design eller på webben (en per rad). Claude läser dem när profilen byggs och före varje manus, bildprompt och scen. En claude.ai-länk synkas från Claude Code, som sparar en ögonblicksbild i profilen.</span></label>
+            <textarea name="design_systems" rows="2" placeholder="https://claude.ai/…">${esc(DS.map((d) => d.url).join("\n"))}</textarea>
+            ${DS.length ? `<div class="small muted">${DS.map((d) => `${esc(d.name || d.url)}: ${d.syncedAt ? `synkat ${esc(d.syncedAt)}` : "inte synkat än"}`).join("<br>")}</div>` : ""}
           </div>
 
           <div class="section">
@@ -527,7 +533,7 @@ async function customerPage(id) {
               <div><label>Rörelse</label>${sel("motion", P.motion || "slide", [["slide", "Lugn glidning (de flesta kunder)"], ["deal", "Kort som delas ut (journalfilm)"]])}</div>
               <div><label>Bakgrund</label>${sel("backdrop", P.backdrop || "plain", [["plain", "Enkel gradient"], ["starbursts", "Stjärnor (journalfilm)"]])}</div>
               <div><label>Utan bild</label>${sel("ground", P.ground || "soft", [["soft", "Mjuka cirklar i profilens färger"], ["starburst", "Solfjäder (journalfilm)"]])}</div>
-              <div><label>Kortets hörn</label>${sel("radius", String(P.card?.radius ?? 14), [["0", "Raka"], ["8", "Lätt rundade"], ["14", "Rundade"], ["26", "Mycket rundade"]])}</div>
+              <div><label>Kortets hörn</label>${sel("radius", String(P.card?.radius ?? 14), [["0", "Raka"], ["2", "Nästan raka"], ["8", "Lätt rundade"], ["14", "Rundade"], ["26", "Mycket rundade"]])}</div>
               <div><label>Kantlinje</label>${sel("border", String(P.card?.border ?? 0), [["0", "Ingen"], ["2", "Tunn"], ["5", "Tjock (journalfilm)"]])}</div>
               <div><label>Filmkorn</label>${sel("filmLook", String(Boolean(P.filmLook)), [["false", "Av"], ["true", "På (gammal film)"]])}</div>
               <div><label>Kicker <span class="hint">– liten text i titelbandet</span></label><input type="text" name="kicker" value="${esc(P.kicker || "")}"></div>
@@ -569,7 +575,7 @@ async function customerPage(id) {
           <div class="panel">
             <h2>✦ Claude</h2>
             <p class="small muted">Claude läser materialet och fyller i färger, typsnitt, logga, bildstil, röst och tonalitet. Det som inte framgår skriver Claude som frågor till dig.</p>
-            <button class="primary" data-build ${dis}>✦ Bygg profilen från materialet</button>
+            <div class="row"><button class="primary" data-build ${dis}>✦ Bygg profilen från materialet</button>${DS.length ? `<button data-sync ${dis}>✦ Synka designsystemet</button>` : ""}</div>
             <form id="kask" style="margin-top:12px"><textarea name="prompt" placeholder="T.ex. ”Använd den mörkgröna varianten av loggan” eller ”Gör bildstilen mer fotografisk”" ${dis}></textarea>
               <div class="row" style="margin-top:8px"><button ${dis}>Skicka</button>${k.claudeSession ? `<button type="button" class="link small" data-kreset>Nytt samtal</button>` : ""}</div></form>
             ${k.claudeLast?.result ? `<details open style="margin-top:12px"><summary>Claudes senaste svar <span class="muted small">${ago(k.claudeLast.at)}</span></summary><div class="answer">${md(k.claudeLast.result)}</div></details>` : ""}
@@ -640,6 +646,7 @@ async function customerPage(id) {
         name: v("name"), kicker: v("kicker"), language: sv ? "sv" : "en", locale: sv ? "sv-SE" : "en-GB",
         formats: fd.getAll("fmt"), motion: v("motion"), backdrop: v("backdrop"), ground: v("ground"), filmLook: v("filmLook") === "true",
         palette, fonts, card: { radius: Number(v("radius")), border: Number(v("border")) }, endCard: { line: v("end_line"), url: v("end_url") },
+        designSystems: v("design_systems"),
       },
       style: { ink: v("ink"), never: v("never") },
       design: { description: v("v_description"), text: v("v_text") },
@@ -667,9 +674,10 @@ async function customerPage(id) {
     }
   };
   app.querySelector("[data-build]")?.addEventListener("click", () => {
-    if (!k.material.length && !k.links.trim()) return toast("Ladda upp kundens material eller skriv en länk först");
+    if (!k.material.length && !k.links.trim() && !DS.length) return toast("Ladda upp kundens material eller skriv en länk först");
     claude({ preset: "build" });
   });
+  app.querySelector("[data-sync]")?.addEventListener("click", () => claude({ preset: "sync" }));
   $("#kask").addEventListener("submit", (e) => {
     e.preventDefault();
     const prompt = e.target.prompt.value.trim();

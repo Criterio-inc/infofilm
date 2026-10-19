@@ -1,6 +1,6 @@
 ---
 name: infofilm
-description: Make narrated infographic clips and explainer films for clients, in the client's own look — a 30–90 s clip (klipp) with one message, or a 2–15 minute film in parts — in 16:9 and/or 1:1, with code-drawn infographics that land on the spoken word. Each client is a profile (colours, fonts, logo, illustration style, narrator, music) reused across films; Criterio AB's is the default, the original 1950s newsreel is one of them. Pipeline: research → fact-checked script → ElevenLabs narrator with per-character timestamps → Suno music → Gemini illustrations → Remotion scenes cued to words → −14 LUFS master + SRT. Use when the user asks for a film, clip, explainer video, infographic film, "ett klipp om …", "gör en film om …", "en film till <kund>", a new client profile, or another film "like the election film".
+description: Make narrated infographic clips and explainer films for clients, in the client's own look — a 30–90 s clip (klipp) with one message, or a 2–15 minute film in parts — in 16:9 and/or 1:1, with code-drawn infographics that land on the spoken word. Each client is a profile (colours, fonts, logo, illustration style, narrator, music) reused across films; Critero Consulting AB's is the default, the original 1950s newsreel is one of them. Pipeline: research → fact-checked script → ElevenLabs narrator with per-character timestamps → Suno music → Gemini illustrations → Remotion scenes cued to words → −14 LUFS master + SRT. Use when the user asks for a film, clip, explainer video, infographic film, "ett klipp om …", "gör en film om …", "en film till <kund>", a new client profile, or another film "like the election film".
 ---
 
 # infofilm: infographic clips and films for clients
@@ -12,7 +12,7 @@ Every number, title and label is drawn in code from a fact base. Pictures never 
 The template in `template/` is a complete, working film: a demo about leap years. Scaffold it, then replace the demo with your film piece by piece. The film renders at every step: scenes without a component show their card, and scenes without narration get estimated timing. That way you can always look at the whole thing before you spend money.
 
 ## Profile, mode and format: decide these first
-- **Profile** (`profiles/`, or `$INFOFILM_PROFILES`): the client's look and sound, kept across films. It holds the palette by role, fonts, logo, card shape, motion, illustration style (`style.json`), narrator (`design.json`, `voice.json`), reusable music, and `NOTES.md` (tone, approvals, allowed services). `criterio` (Criterio AB) is the default. `newsreel` is the original 1950s house style; `_mall` is the starting point for a new client (`scripts/new_profile.sh`). **Read the profile's `NOTES.md` before writing a script or a prompt.** See [profiles/README.md](profiles/README.md).
+- **Profile** (`profiles/`, or `$INFOFILM_PROFILES`): the client's look and sound, kept across films. It holds the palette by role, fonts, logo, card shape, motion, illustration style (`style.json`), narrator (`design.json`, `voice.json`), reusable music, and `NOTES.md` (tone, approvals, allowed services). `critero` (Critero Consulting AB) is the default. `newsreel` is the original 1950s house style; `_mall` is the starting point for a new client (`scripts/new_profile.sh`). **Read the profile's `NOTES.md` before writing a script or a prompt.** See [profiles/README.md](profiles/README.md).
 - **Mode**:
   - `klipp`: 30–90 s, ONE message, 2–5 scenes, no parts and no commercial breaks. It is a hook in the first 2 seconds, 1–3 scenes that each show one thing, then the built-in `end-card` (logo, line, address).
   - `film`: 2–15 min in parts, as below.
@@ -40,9 +40,9 @@ Work through these phases in order. The ⛔ steps are gates: stop and get the us
 - Confirm the client (profile), mode (klipp or film), format(s), subject, audience, channel (web, LinkedIn, intranet, a meeting), language, length and purpose. When the user names a client without a profile, make one first (phase 2). Check `ELEVENLABS_API_KEY` and `OPENROUTER_API_KEY` in the environment, Chrome with the claude-in-chrome extension and a Suno login, and `node`, `pnpm`/`npm`, `ffmpeg` and `python3` with `numpy` and `elevenlabs`.
 - Scaffold:
   ```
-  <skill>/scripts/new_film.sh <dir> --profile criterio --mode klipp --format 16:9,1:1 --slug my-clip --title "My Clip"
+  <skill>/scripts/new_film.sh <dir> --profile critero --mode klipp --format 16:9,1:1 --slug my-clip --title "My Clip"
   ```
-  This copies the template, puts the profile in (`brand/`, `art/style.json`, `voice/`, `music/`), installs Remotion, synthesises the sound effects, builds a first timeline and typechecks. Language and locale come from the profile; override them with `--lang`/`--locale`. To switch an existing project to another profile, run `scripts/apply_profile.py <profile-dir> <project-dir>`.
+  Add `--design-system <url>` (repeatable) for a design system that belongs to this film only. This copies the template, puts the profile in (`brand/`, `art/style.json`, `voice/`, `music/`), installs Remotion, synthesises the sound effects, builds a first timeline and typechecks. Language and locale come from the profile; override them with `--lang`/`--locale`. To switch an existing project to another profile, run `scripts/apply_profile.py <profile-dir> <project-dir>`.
 - Keep decisions in `notes/log.md`, with dates and who decided.
 - Renders need room. Check `df -h`, and point `OUTDIR` at a big disk when the system disk is under about 20 GB free.
 
@@ -52,12 +52,13 @@ Work through these phases in order. The ⛔ steps are gates: stop and get the us
 - See [references/script.md](references/script.md).
 
 ### 2 · Look ⛔ (once per client, not once per film)
-- An existing profile is the look: use it as it is. A new client needs a profile first: `scripts/new_profile.sh <id> --name "…"`, then the colours, fonts and logo from the client's brand guidelines. Ask for the guidelines and the logo file, and never guess a client's colours. After that come the illustration style in `style.json` and the narrator brief in `design.json`.
+- An existing profile is the look: use it as it is. If it links design systems (`designSystems` in `profile.json`), read them and sync their tokens into the profile first (profiles/README.md, "Design systems"). A new client needs a profile first: `scripts/new_profile.sh <id> --name "…"`, then the colours, fonts and logo from the client's brand guidelines. Ask for the guidelines and the logo file, and never guess a client's colours. After that come the illustration style in `style.json` and the narrator brief in `design.json`.
 - Show the profile with the demo's stills in each format (`profiles/README.md`), plus 2–3 test illustrations in the proposed style (`python3 art/gen.py --dry-run`, then ask).
 - A recurring character is optional. If the client wants one, generate the reference portrait (`kind: "ref"`) and a model sheet, get them approved, and store the reference in the profile's `img/`.
 - ⛔ The user approves the profile. Details: [references/style.md](references/style.md) and [references/images.md](references/images.md).
 
 ### 3 · Script → `script/script.md` ⛔
+- **Design systems first.** Before the script, the image prompts (phase 6) and the scenes (phase 7), read the design systems linked in `brand/profile.json` and `film.json` (`designSystems`): a claude.ai link with the Artifact tool (`action: "read"`), anything else with WebFetch; without the Artifact tool (headless `claude -p`), the snapshot the entry's `file` points to. They set the tone, layout and picture language as well as the tokens. See [profiles/README.md](profiles/README.md).
 - **klipp**: a hook in the first sentence, 1–3 scenes of 10–25 s that each show one thing, then `## Sxx · end-card`, all under one `# KLIPP` heading. Budget about 120–150 words for 60 s. The scaffold's `script.md` shows the shape.
 - **film**: an opening, 2–4 parts and a closing. The newsreel profile adds a theme, commercial breaks and a ballad. Each scene is one card of 15–40 s.
 - The words budget is minutes × about 127 words per minute (a calm Swedish narrator: measure, often 140–150).
@@ -116,7 +117,7 @@ Visual fixes cost nothing but a re-render; only new narration, images or downloa
 
 | Path | What |
 |---|---|
-| `film.json` | title, slug, language, locale, profile, mode, formats, part kickers and beds, scene intro/after music, TTS model, outDir |
+| `film.json` | title, slug, language, locale, profile, mode, formats, `designSystems` (this film's own, on top of the profile's), part kickers and beds, scene intro/after music, TTS model, outDir |
 | `brand/` | the client profile (profile.json, logo, fonts, NOTES.md); `tools/build_timeline.py` turns it into `video/src/timeline/brand.json` |
 | `script/script.md` | the manuscript: `## Sxx · name`, `<!-- title: -->`, `<!-- facts: -->`, `> visual:`, narration |
 | `notes/research.md`, `notes/log.md` | the fact base; decisions and costs |

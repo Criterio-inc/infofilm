@@ -40,7 +40,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
   <key>LSApplicationCategoryType</key><string>public.app-category.video</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
-  <key>NSHumanReadableCopyright</key><string>Criterio AB</string>
+  <key>NSHumanReadableCopyright</key><string>Critero Consulting AB</string>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>
 </dict></plist>
 PLIST

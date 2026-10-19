@@ -1,0 +1,80 @@
+{
+  "_doc": "Critero Consulting AB's own profile and the default for new films (scripts/new_film.sh). Colours, fonts and logo are taken from www.criteroconsulting.se (assets/css/site.css :root, assets/fonts, assets/img/logga) on 2026-10-19; NOTES.md maps each role to its CSS variable.",
+  "name": "Critero Consulting AB",
+  "language": "sv",
+  "locale": "sv-SE",
+  "kicker": "",
+  "formats": [
+    "16:9",
+    "1:1"
+  ],
+  "designSystems": [],
+  "palette": {
+    "backdrop": "#F0EAD8",
+    "backdropLight": "#F5F1E6",
+    "surfaceLight": "#F5F1E6",
+    "surface": "#F5F1E6",
+    "surfaceDark": "#E4DDC7",
+    "band": "#174F49",
+    "bandText": "#F5F1E6",
+    "kicker": "#E4E8DF",
+    "ink": "#1A1A12",
+    "primary": "#174F49",
+    "accent": "#F49140",
+    "accentDark": "#3D6E50",
+    "signal": "#F49140",
+    "positive": "#3D6E50",
+    "highlight": "#86A893",
+    "dim": "#F5F1E6",
+    "faint": "#4D4B3E"
+  },
+  "fonts": {
+    "display": {
+      "family": "Space Grotesk",
+      "google": true,
+      "weights": [
+        500
+      ],
+      "uppercase": false,
+      "widthEm": 0.53
+    },
+    "ui": {
+      "family": "Space Grotesk",
+      "google": true,
+      "weights": [
+        400,
+        500,
+        700
+      ]
+    },
+    "mono": {
+      "family": "JetBrains Mono",
+      "google": true,
+      "weights": [
+        400
+      ]
+    }
+  },
+  "card": {
+    "radius": 2,
+    "border": 0,
+    "shadow": "0 0 0 1px rgba(26,26,18,0.16)"
+  },
+  "plate": {
+    "radius": 2,
+    "border": 0,
+    "shadow": "0 0 0 1px rgba(26,26,18,0.16)"
+  },
+  "motion": "slide",
+  "backdrop": "plain",
+  "filmLook": false,
+  "ground": "soft",
+  "logo": {
+    "file": "logo.png",
+    "height": 48
+  },
+  "endCard": {
+    "line": "Boka ett första samtal",
+    "url": "criteroconsulting.se"
+  }
+}

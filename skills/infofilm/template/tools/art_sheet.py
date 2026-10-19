@@ -17,7 +17,10 @@ if not imgs:
 out = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "out/art-sheet.jpg"
 out.parent.mkdir(parents=True, exist_ok=True)
 cols, w, h = 4, 640, 272
-cells = [f"[{i}]scale={w}:{h},drawtext=text='{p.stem[5:]}':x=8:y=8:fontsize=26:fontcolor=yellow:box=1:boxcolor=black@0.6[s{i}]" for i, p in enumerate(imgs)]
+# the labels need ffmpeg's drawtext (freetype); some builds, like Homebrew's ffmpeg 9, lack it
+LABELS = " drawtext " in subprocess.run(["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True).stdout
+label = (lambda t: f",drawtext=text='{t}':x=8:y=8:fontsize=26:fontcolor=yellow:box=1:boxcolor=black@0.6") if LABELS else (lambda t: "")
+cells = [f"[{i}]scale={w}:{h}{label(p.stem[5:])}[s{i}]" for i, p in enumerate(imgs)]
 pads = (-len(imgs)) % cols
 cells += [f"color=black:s={w}x{h}:d=1[p{k}]" for k in range(pads)]
 names = [f"[s{i}]" for i in range(len(imgs))] + [f"[p{k}]" for k in range(pads)]

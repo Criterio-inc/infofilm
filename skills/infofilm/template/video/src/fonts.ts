@@ -5,7 +5,7 @@ import brand from "./timeline/brand.json";
 // Google fonts into the profile; a client's own fonts are files in the profile). No network at render.
 type Role = { family: string; weight?: number; uppercase?: boolean; widthEm?: number };
 type Face = { family: string; weight: number; style: string; src: string; unicodeRange?: string };
-const F = (brand as unknown as { fonts: { display: Role; ui: Role; script?: Role; faces: Face[] } }).fonts;
+const F = (brand as unknown as { fonts: { display: Role; ui: Role; script?: Role; mono?: Role; faces: Face[] } }).fonts;
 
 if (typeof document !== "undefined") {
   const handle = delayRender("loading the profile's fonts");
@@ -39,6 +39,9 @@ export const UI = stack(F.ui);
 /** Commercial breaks and slogans only (newsreel: Lobster). Falls back to DISPLAY. */
 export const SCRIPT = stack(F.script ?? F.display);
 export const SCRIPT_WEIGHT = (F.script ?? F.display).weight ?? 400;
+/** The kicker and other small labels, when the profile has a "mono" role (Critero: JetBrains Mono). Falls back to UI. */
+export const MONO = stack(F.mono ?? F.ui);
+export const MONO_WEIGHT = F.mono ? (F.mono.weight ?? 400) : 600;
 /** The weight that goes with a family from this file (for components that take a `font` prop). */
 export const weightOf = (family: string) => (family === DISPLAY ? DISPLAY_WEIGHT : family === SCRIPT ? SCRIPT_WEIGHT : 400);
 /** Whether the profile sets titles in capitals (the newsreel does, most clients don't). */

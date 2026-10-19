@@ -105,6 +105,23 @@ def copy_file(src, dst):
     shutil.copy2(src, dst)
 
 
+def logo_aspect(path):
+    """Width / height of a PNG (its header) or an SVG (viewBox, else width/height), so the card
+    leaves the title room for the logo it really has. None when it cannot tell."""
+    try:
+        if path.suffix.lower() == ".png":
+            head = path.read_bytes()[:24]
+            w, h = int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big")
+            return round(w / h, 3) if h else None
+        svg = path.read_text(encoding="utf-8", errors="ignore")
+        vb = re.search(r'viewBox="\s*[-\d.]+[\s,]+[-\d.]+[\s,]+([\d.]+)[\s,]+([\d.]+)', svg)
+        wh = re.search(r'<svg[^>]*\bwidth="([\d.]+)[^"]*"[^>]*\bheight="([\d.]+)', svg)
+        m = vb or wh
+        return round(float(m.group(1)) / float(m.group(2)), 3) if m and float(m.group(2)) else None
+    except OSError:
+        return None
+
+
 def build_brand():
     """brand/profile.json + the format → video/src/timeline/brand.json; logo and fonts → public/brand/."""
     if not BRAND:
@@ -132,7 +149,7 @@ def build_brand():
     logo = BRAND.get("logo") or None
     if logo:
         copy_file(BRAND_DIR / logo["file"], pub / logo["file"])
-        logo = {**logo, "src": "brand/" + logo["file"]}
+        logo = {**logo, "src": "brand/" + logo["file"], "aspect": logo.get("aspect") or logo_aspect(BRAND_DIR / logo["file"])}
     w, h = SIZES[FORMAT]
     out = {"format": FORMAT, "width": w, "height": h, "mode": MODE, "name": BRAND.get("name", ""),
            **{k: BRAND[k] for k in ("palette", "card", "plate", "motion", "backdrop", "filmLook", "ground", "endCard") if k in BRAND},

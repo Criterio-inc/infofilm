@@ -2,7 +2,8 @@
 # Scaffold a new film or clip from the template, dressed in a client profile.
 #   new_film.sh <project-dir> [--profile kund] [--mode klipp|film] [--format 16:9,1:1]
 #               [--slug my-film] [--title "My Film"] [--lang sv] [--locale sv-SE]
-# --profile  a folder in $INFOFILM_PROFILES or <skill>/profiles, or a path (default: criterio)
+#               [--design-system <url>]   (repeatable: this film's own, on top of the profile's)
+# --profile  a folder in $INFOFILM_PROFILES or <skill>/profiles, or a path (default: critero)
 # --mode     klipp: 30–90 s, one message, ends on the client's end card · film: 2–15 min in parts
 # --format   one or more of 16:9, 1:1, 9:16 (the first is the main one); default: the profile's, else 16:9
 # Language and locale default to the profile's. Copies the template, puts the profile in, installs
@@ -12,7 +13,7 @@ set -euo pipefail
 SKILL="$(cd "$(dirname "$0")/.." && pwd)"
 DIR="${1:?usage: new_film.sh <project-dir> [--profile p] [--mode klipp|film] [--format 16:9,1:1] [--slug s] [--title t] [--lang xx] [--locale xx-XX]}"
 shift
-PROFILE="criterio" MODE="film" FORMATS="" SLUG="" TITLE="" LANG_="" LOCALE=""
+PROFILE="critero" MODE="film" FORMATS="" SLUG="" TITLE="" LANG_="" LOCALE="" DESIGN=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --profile) PROFILE="$2"; shift 2 ;;
@@ -22,6 +23,7 @@ while [[ $# -gt 0 ]]; do
     --title) TITLE="$2"; shift 2 ;;
     --lang) LANG_="$2"; shift 2 ;;
     --locale) LOCALE="$2"; shift 2 ;;
+    --design-system|--design-systems) DESIGN="${DESIGN:+$DESIGN,}$2"; shift 2 ;;
     *) echo "unknown option $1"; exit 1 ;;
   esac
 done
@@ -39,7 +41,7 @@ cp -R "$SKILL/template/." "$DIR/"
 cd "$DIR"
 if [[ "$MODE" == "klipp" ]]; then mv script/klipp.md script/script.md; else rm script/klipp.md; fi
 python3 "$SKILL/scripts/apply_profile.py" "$PDIR" . --mode "$MODE" --formats "$FORMATS" \
-  --slug "$SLUG" --title "$TITLE" --lang "$LANG_" --locale "$LOCALE"
+  --slug "$SLUG" --title "$TITLE" --lang "$LANG_" --locale "$LOCALE" --design-systems "$DESIGN"
 [[ -f brand/fonts/google.json ]] || python3 tools/fetch_fonts.py
 python3 tools/make_sfx.py
 python3 tools/build_timeline.py

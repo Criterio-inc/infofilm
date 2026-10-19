@@ -14,7 +14,7 @@ kundprofil → research → faktagranskat manus → berättarröst (ElevenLabs, 
 ```
 
 ## Så funkar det
-- **En profil per kund** (`skills/infofilm/profiles/<kund>/`). Den innehåller färger (som roller), typsnitt, logga, kortform, rörelse, bildstil, berättarröst, återanvändbar musik och `NOTES.md` med tonalitet och regler. Den görs en gång och återanvänds i varje film. `criterio` är standard.
+- **En profil per kund** (`skills/infofilm/profiles/<kund>/`). Den innehåller färger (som roller), typsnitt, logga, kortform, rörelse, bildstil, berättarröst, återanvändbar musik och `NOTES.md` med tonalitet och regler. Den görs en gång och återanvänds i varje film. `critero` (Critero Consulting AB) är standard.
 - **Två lägen.** `klipp` består av en krok, 1–3 scener och ett slutkort med logga. `film` består av delar.
 - **Flera format i ett projekt.** Scenerna lägger ut sig efter fönstrets form. `tools/render.sh` levererar `<namn>.mp4` och `<namn>-1x1.mp4`.
 - **Kod ritar allt som måste stämma.** Varje siffra kommer från `data.ts` ← `notes/research.md` ← primärkällor. Bildmodellen står bara för miljö och stämning, och bilderna innehåller aldrig text.
@@ -48,7 +48,7 @@ Kundmaterial som inte ska ligga i det här repot (anteckningar, licensierade typ
 ```
 skills/infofilm/
 ├── SKILL.md                 # pipelinen: profil, läge, format, faserna och grindarna
-├── profiles/                # criterio (standard), _mall (ny kund), newsreel (originalet) + README
+├── profiles/                # critero (standard), _mall (ny kund), newsreel (originalet) + README
 ├── references/              # manus, stil, röst, musik, bilder, scener, rendering, fallgropar
 ├── scripts/
 │   ├── new_film.sh          # nytt klipp eller ny film från mallen, i en kundprofil
