@@ -242,7 +242,7 @@ async function jobText(jobId) {
 }
 
 const stepOf = (title) =>
-  /^Röst/.test(title) ? "voice" : /^Bilder|bildprompter/i.test(title) ? "images" : /Snabbförhandsvisning|Stillbilder|bygg scenerna|granska/i.test(title) ? "review"
+  /^Röst/.test(title) ? "voice" : /^Bilder|bildprompter/i.test(title) ? "images" : /Snabbförhandsvisning|Stillbilder|bygg scenerna|granska|Musikprompt|^Musik/i.test(title) ? "review"
   : /^Rendera/.test(title) ? "deliver" : /research och manus/i.test(title) ? "script" : null;
 const kr = (n) => new Intl.NumberFormat("sv-SE").format(n);
 const list = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} och ${xs[xs.length - 1]}` : xs[0] || "");
@@ -367,6 +367,21 @@ async function projectPage(id) {
       ${ms.loops.find((m) => m.key === ms.bed && m.src) ? `<audio controls preload="none" src="${fileUrl(id, ms.loops.find((m) => m.key === ms.bed && m.src).src)}" style="flex:1;min-width:200px"></audio>` : ""}
       <label class="btn" style="margin:0">Ladda upp eget ljud<input type="file" id="ownaudio" accept=".wav,.mp3,.m4a,.aif,.aiff,.flac" hidden ${busy ? "disabled" : ""}></label></div>
       <p class="small muted" style="margin:6px 0 0">${ms.loops.length ? "Ett eget ljud gäller bara den här filmen. Musiken ligger lågt under rösten och lite högre i pauserna." : `Avsändaren har inga slingor än: ladda upp ett eget ljud här, eller lägg till slingor under Avsändare → ${esc(p.profileName)} → Musik.`}</p>`;
+    // a prompt for Suno, written by Claude from everything the film is: the user makes the music there
+    const sp = p.sunoPrompt;
+    const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+    const copyField = (label, value, rows = 1) => `<div><div class="spread"><label style="margin:8px 0 4px">${label}</label><button type="button" class="link small" data-copy="${esc(value)}">Kopiera</button></div>${rows > 1 ? `<textarea readonly rows="${rows}">${esc(value)}</textarea>` : `<input type="text" readonly value="${esc(value)}">`}</div>`;
+    card.more += `<div class="sunobox">
+      <div class="spread"><b>Egen musik från Suno</b>${sp ? `<span class="small muted">skriven ${ago(sp.at)}</span>` : ""}</div>
+      <p class="small muted" style="margin:4px 0 8px">Claude skriver en prompt till Suno utifrån manus, brief och avsändarens tonalitet. Du gör låten i Suno, laddar ner den du gillar och lägger in den med Ladda upp eget ljud ovan.</p>
+      <div class="row"><input type="text" id="musicwish" placeholder="Önskemål, valfritt: till exempel lite jazzigt, sommarkänsla, mer stråkar" style="flex:1;min-width:220px" ${busy ? "disabled" : ""}><button data-musicprompt ${busy ? "disabled" : ""}>✦ ${sp ? "Skriv en ny prompt" : "Skriv en Suno-prompt"}</button></div>
+      ${sp ? `${sp.why ? `<p class="small" style="margin:10px 0 0">${esc(sp.why)}</p>` : ""}
+        ${copyField("Styles", sp.styles, 4)}
+        ${copyField("Exclude styles <span class=\"hint\">– under More Options</span>", sp.exclude || "vocals, choir")}
+        <div class="two">${copyField("Song Title", sp.title || p.title)}${copyField("Duration <span class=\"hint\">– More Options → Custom</span>", mmss(sp.lengthSeconds || p.seconds + 10))}</div>
+        <ol class="small" style="margin:10px 0 0;padding-left:18px"><li>Öppna Suno, välj <b>Create → Advanced</b> och lämna <b>Lyrics</b> tom, då blir låten instrumental.</li><li>Klistra in <b>Styles</b>, <b>Song Title</b> och under <b>More Options</b> <b>Exclude styles</b> och <b>Duration</b>.</li><li>Tryck <b>Create</b>, lyssna och ladda ner tagningen du gillar (WAV eller MP3).</li><li>Tryck <b>Ladda upp eget ljud</b> ovan och välj filen. Gör sedan en ny snabbversion.</li></ol>
+        <div class="row" style="margin-top:8px"><a class="btn" href="https://suno.com/create" target="_blank" rel="noopener">Öppna Suno ↗</a></div>` : ""}
+    </div>`;
     if (p.preview) card.body = `<video id="previewvid" controls preload="metadata" src="${fileUrl(id, p.preview.path, p.preview.mtime)}"></video>`;
   }
 
@@ -448,6 +463,28 @@ async function projectPage(id) {
     window.scrollTo({ top: 0 });
   }));
   $("#bedsel")?.addEventListener("change", (e) => act("music", { key: e.target.value }));
+  app.querySelector("[data-musicprompt]")?.addEventListener("click", async () => {
+    const wish = $("#musicwish")?.value.trim();
+    try {
+      await api(`projects/${enc}/preset`, { body: { preset: "music", extra: wish ? `Önskemål från användaren om musiken: ${wish}` : "" } });
+      reload();
+    } catch (e) {
+      toast(e.message);
+    }
+  });
+  app.querySelectorAll("[data-copy]").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(b.dataset.copy);
+    } catch {
+      // older WebKit without clipboard access: copy through a selected field
+      const ta = Object.assign(document.createElement("textarea"), { value: b.dataset.copy });
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    toast("Kopierat");
+  }));
   $("#ownaudio")?.addEventListener("change", async (e) => {
     const file = e.target.files[0];
     if (!file) return;
