@@ -14,7 +14,7 @@ NVM_NODE=$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -
 [[ -n "$NVM_NODE" ]] && export PATH="$NVM_NODE:$PATH"
 command -v node >/dev/null || { osascript -e 'display alert "Infofilm" message "Hittar inte Node. Installera med: brew install node"' 2>/dev/null; echo "node saknas"; exit 1; }
 
-up() { curl -fs "$URL/icon.svg" -o /dev/null --max-time 1; }
+up() { curl -fs "$URL/icon.png" -o /dev/null --max-time 1; }
 if ! up; then
   nohup node "$DIR/server.mjs" >> "$HOME/.infofilm/server.log" 2>&1 &
   for _ in $(seq 1 40); do up && break; sleep 0.25; done

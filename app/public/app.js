@@ -17,6 +17,25 @@ async function api(path, opts = {}) {
   return data;
 }
 
+/** An in-page dialog (instead of confirm/prompt, which a native app window may not show).
+ * Resolves to true/false, or to the typed text (null on cancel) when `input` is given. */
+function ask({ title, text = "", ok = "OK", input = null, pay = false }) {
+  return new Promise((resolve) => {
+    const d = document.createElement("dialog");
+    d.className = "ask";
+    d.innerHTML = `<form method="dialog"><h2>${esc(title)}</h2>${text ? `<p class="muted">${esc(text)}</p>` : ""}${input != null ? `<input type="text" name="v" value="${esc(input)}">` : ""}
+      <div class="row" style="justify-content:flex-end;margin-top:14px"><button value="no" type="submit">Avbryt</button><button value="yes" type="submit" class="${pay ? "pay" : "primary"}">${esc(ok)}</button></div></form>`;
+    document.body.appendChild(d);
+    d.addEventListener("close", () => {
+      const yes = d.returnValue === "yes";
+      resolve(input != null ? (yes ? d.querySelector("input").value.trim() || null : null) : yes);
+      d.remove();
+    });
+    d.showModal();
+    (d.querySelector("input") || d.querySelector("button[value=yes]")).focus();
+  });
+}
+
 function toast(msg) {
   const t = $("#toast");
   t.textContent = msg;
@@ -303,11 +322,11 @@ async function projectPage(id) {
   }));
   app.querySelector("[data-act=narrate-dry]")?.addEventListener("click", () => gate("narrate-dry", "narrate", "#gate-narrate", "Berättarröst (ElevenLabs) – det här skulle debiteras:"));
   app.querySelector("[data-act=images-dry]")?.addEventListener("click", () => gate("images-dry", "images", "#gate-images", "Illustrationer (Gemini via OpenRouter, ca 0,14 USD per bild):"));
-  app.querySelectorAll("[data-pay]").forEach((b) => b.addEventListener("click", () => {
-    if (confirm(`${b.dataset.what}\n\nDet kostar pengar. Fortsätta?`)) act(b.dataset.pay, { estimate: b.dataset.what });
+  app.querySelectorAll("[data-pay]").forEach((b) => b.addEventListener("click", async () => {
+    if (await ask({ title: "Det kostar pengar", text: b.dataset.what, ok: "Godkänn och kör", pay: true })) act(b.dataset.pay, { estimate: b.dataset.what });
   }));
-  app.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", () => {
-    const name = prompt("Namn på rösten (sparas i ElevenLabs och i projektet):", `${p.profileName || "Berättare"} – berättare`);
+  app.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", async () => {
+    const name = await ask({ title: "Spara rösten", text: "Namnet sparas i ElevenLabs och i projektet.", input: `${p.profileName || "Berättare"} – berättare`, ok: "Spara" });
     if (name) act("voice-create", { gid: b.dataset.pick, name });
   }));
   app.querySelectorAll("[data-stills]").forEach((b) => b.addEventListener("click", () => act("stills", { format: b.dataset.stills })));
@@ -377,7 +396,7 @@ function settingsPage() {
       <h1>Inställningar</h1>
       <div class="panel">
         <div class="spread"><h2>Det här behövs</h2><button class="link small" data-recheck>Kontrollera igen</button></div>
-        <ul class="checks">${state.checks.map((x) => `<li><span class="${x.ok ? "ok" : "bad"}">${x.ok ? "✓" : "✗"}</span> <b>${esc(x.label)}</b> <span class="muted small">${x.ok ? esc(x.value || "") : "– " + esc(x.fix)}</span></li>`).join("")}</ul>
+        <ul class="checks">${state.checks.map((x) => `<li><span class="${x.ok ? "ok" : "bad"}">${x.ok ? "✓" : "✗"}</span> <b>${esc(x.label)}</b> <span class="muted small">${x.ok ? esc(x.value || "") + (x.where ? ` · ${esc(x.where)}` : "") : "– " + esc(x.fix)}</span></li>`).join("")}</ul>
       </div>
       <form class="panel" id="setf">
         <h2>Mappar</h2>
@@ -390,6 +409,7 @@ function settingsPage() {
         <details style="margin-top:14px"><summary>Avancerat</summary>
           <label>Webbläsare för stillbilder <span class="hint">– lämna tomt (Remotion hämtar sin egen)</span></label><input type="text" name="browserExecutable" value="${esc(c.browserExecutable)}">
           <p class="small muted">Skillen: ${esc(c.skillDir)}</p>
+          <p class="small muted" style="word-break:break-all">Sökväg för verktygen (PATH): ${esc(state.path || "")}</p>
         </details>
         <div class="row" style="margin-top:16px"><button class="primary">Spara</button><button type="button" class="danger" data-quit>Avsluta appen</button></div>
       </form>
@@ -401,7 +421,7 @@ function settingsPage() {
     settingsPage();
   });
   $("[data-quit]").addEventListener("click", async () => {
-    if (!confirm("Avsluta Infofilm? Pågående jobb avbryts.")) return;
+    if (!(await ask({ title: "Avsluta Infofilm?", text: "Pågående jobb avbryts.", ok: "Avsluta" }))) return;
     await api("quit", { body: {} }).catch(() => {});
     app.innerHTML = `<div class="panel pad"><h2>Infofilm är avslutad</h2><p class="muted">Starta igen från Dock.</p></div>`;
   });
