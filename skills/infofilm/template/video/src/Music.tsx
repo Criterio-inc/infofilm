@@ -50,9 +50,13 @@ const Cut: React.FC<{ cut: MusicCut; from: number; volume: (f: number) => number
   );
 };
 
-/** All music: the opening theme, one looping bed per part (ducked under speech), jingles after speech. */
+/** All music: the opening theme, one looping bed per part (ducked under speech), jingles after speech.
+ * Everything fades to silence over the film's last frames, so nothing is cut off. */
 export const Music: React.FC<{ timeline: Timeline }> = ({ timeline }) => {
   const { scenes, music } = timeline;
+  const end = timeline.durationInFrames;
+  const out = timeline.fadeOutFrames ?? 60;
+  const ending = (abs: number) => clampI(abs, [end - out, end], [1, 0]);
   // beds: one per run of scenes with the same bed key, from its first to its last scene
   const beds: { key: string; from: number; to: number }[] = [];
   for (const s of scenes) {
@@ -68,7 +72,7 @@ export const Music: React.FC<{ timeline: Timeline }> = ({ timeline }) => {
         .map((s) => {
           const from = s.from + s.intro!.at;
           return (
-            <Cut key={`intro-${s.id}`} cut={music[s.intro!.key]} from={from} volume={(f) => JINGLE * (1 - INTRO_DUCK * speaking(scenes, from + f))} />
+            <Cut key={`intro-${s.id}`} cut={music[s.intro!.key]} from={from} volume={(f) => JINGLE * (1 - INTRO_DUCK * speaking(scenes, from + f)) * ending(from + f)} />
           );
         })}
       {beds.map((b, i) => {
@@ -83,7 +87,7 @@ export const Music: React.FC<{ timeline: Timeline }> = ({ timeline }) => {
                 const abs = b.from + f;
                 const fade = clampI(f, [0, 30, len - 45, len], [0, 1, 1, 0]);
                 const duck = BED + (DUCKED - BED) * speaking(scenes, abs);
-                return duck * fade * (1 - jingling(scenes, music, abs));
+                return duck * fade * (1 - jingling(scenes, music, abs)) * ending(abs);
               }}
             />
           </Sequence>
@@ -92,7 +96,7 @@ export const Music: React.FC<{ timeline: Timeline }> = ({ timeline }) => {
       {scenes
         .filter((s) => s.after && music[s.after.key])
         .map((s) => (
-          <Cut key={s.id} cut={music[s.after!.key]} from={s.from + s.after!.at} volume={() => JINGLE} />
+          <Cut key={s.id} cut={music[s.after!.key]} from={s.from + s.after!.at} volume={(f) => JINGLE * ending(s.from + s.after!.at + f)} />
         ))}
     </>
   );

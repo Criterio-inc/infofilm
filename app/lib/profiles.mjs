@@ -194,10 +194,10 @@ export function createProfile(name) {
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  if (!id) throw err("ange kundens namn");
+  if (!id) throw err("ange avsändarens namn");
   if (listProfiles().some((p) => p.id === id)) throw err(`det finns redan en profil som heter ${id}`, 409);
   mkdirSync(ownRoot(), { recursive: true });
-  const job = startJob(jobKey(id), "Ny kundprofil", [
+  const job = startJob(jobKey(id), "Ny profil", [
     { label: "Ny profil från _mall", cmd: "bash", args: [path.join(SKILL_DIR, "scripts/new_profile.sh"), id, "--name", String(name)], cwd: SKILL_DIR, env: { INFOFILM_PROFILES: ownRoot() } },
   ]);
   return { id, job };
@@ -218,7 +218,7 @@ export function profileClaude(id, prompt, title) {
 export const profilePrompt = () => PROFILE_PROMPT.replace("<skill>", SKILL_DIR);
 export const syncPrompt = () => SYNC_PROMPT.replace("<skill>", SKILL_DIR);
 const PROFILE_PROMPT =
-  "Bygg den här kundprofilen från kundens material: allt i material/ (grafisk manual, loggor, exempel, presentationer), länkarna i material/LINKS.md och anteckningarna i NOTES.md. Läs skillens profiles/README.md och references/style.md först. Fyll i profile.json (färger per roll, typsnitt, logga, kortform, rörelse, slutkort), style.json (bildstilen för illustrationerna och never-listan), design.json (berättarrösten) och NOTES.md (tonalitet, tilltal, ord, regler). Ta färger, typsnitt och logga ur materialet, gissa aldrig: det som saknas skriver du som en fråga sist i NOTES.md och i ditt svar. Finns det länkar i designSystems i profile.json, läs varje designsystem (eller dess ögonblicksbild i design-systems/) och synka in dess tokens enligt avsnittet ”Design systems” i profiles/README.md. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Kör sedan python3 <skill>/template/tools/fetch_fonts.py . för Google-typsnitten. Avsluta med en kort sammanfattning av profilen och vad du behöver från mig.";
+  "Bygg den här profilen från avsändarens material: allt i material/ (grafisk manual, loggor, exempel, presentationer), länkarna i material/LINKS.md och anteckningarna i NOTES.md. Läs skillens profiles/README.md och references/style.md först. Fyll i profile.json (färger per roll, typsnitt, logga, kortform, rörelse, slutkort), style.json (bildstilen för illustrationerna och never-listan), design.json (berättarrösten) och NOTES.md (tonalitet, tilltal, ord, regler). Ta färger, typsnitt och logga ur materialet, gissa aldrig: det som saknas skriver du som en fråga sist i NOTES.md och i ditt svar. Finns det länkar i designSystems i profile.json, läs varje designsystem (eller dess ögonblicksbild i design-systems/) och synka in dess tokens enligt avsnittet ”Design systems” i profiles/README.md. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Kör sedan python3 <skill>/template/tools/fetch_fonts.py . för Google-typsnitten. Avsluta med en kort sammanfattning av profilen och vad du behöver från mig.";
 
 /** The newest change in the skill's template (its code, not node_modules or renders). */
 function templateStamp(dir = path.join(SKILL_DIR, "template")) {
@@ -233,7 +233,7 @@ function templateStamp(dir = path.join(SKILL_DIR, "template")) {
 }
 
 const SYNC_PROMPT =
-  "Synka kundens designsystem in i profilen. Läs skillens profiles/README.md, avsnittet \"Design systems\". Läs varje länk i \"designSystems\" i profile.json: med verktyget Artifact (action read) om det är en claude.ai-länk, annars med WebFetch. Spara det du läste som en ögonblicksbild i design-systems/<kortnamn>.md (tokens med värden, typografi, form, bildspråk och tonalitet, och länken och datumet överst) och peka på den med \"file\" på länken. Mappa designsystemets tokens till profilens roller: färger till palette, typsnitt till fonts, hörnradie, kantlinjer och skuggor till card och plate, och bildspråk eller tonalitet till style.json och NOTES.md. Gissa inget: det som inte framgår skriver du som en fråga sist i NOTES.md. Skriv namnet, dagens datum (syncedAt) och ögonblicksbildens sökväg (file) på varje länk i designSystems, och en tabell i NOTES.md under \"Designsystem\" som visar vilken token som blev vilken roll och vad som skiljer mot hur profilen såg ut förut. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Har typsnitten ändrats, kör python3 <skill>/template/tools/fetch_fonts.py . Avsluta med en kort sammanfattning av vad som ändrades.";
+  "Synka avsändarens designsystem in i profilen. Läs skillens profiles/README.md, avsnittet \"Design systems\". Läs varje länk i \"designSystems\" i profile.json: med verktyget Artifact (action read) om det är en claude.ai-länk, annars med WebFetch. Spara det du läste som en ögonblicksbild i design-systems/<kortnamn>.md (tokens med värden, typografi, form, bildspråk och tonalitet, och länken och datumet överst) och peka på den med \"file\" på länken. Mappa designsystemets tokens till profilens roller: färger till palette, typsnitt till fonts, hörnradie, kantlinjer och skuggor till card och plate, och bildspråk eller tonalitet till style.json och NOTES.md. Gissa inget: det som inte framgår skriver du som en fråga sist i NOTES.md. Skriv namnet, dagens datum (syncedAt) och ögonblicksbildens sökväg (file) på varje länk i designSystems, och en tabell i NOTES.md under \"Designsystem\" som visar vilken token som blev vilken roll och vad som skiljer mot hur profilen såg ut förut. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Har typsnitten ändrats, kör python3 <skill>/template/tools/fetch_fonts.py . Avsluta med en kort sammanfattning av vad som ändrades.";
 
 /** Test stills: one small preview film (made once), switched to this profile, stills per format. */
 export function previewProfile(id) {

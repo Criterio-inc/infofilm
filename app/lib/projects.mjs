@@ -298,7 +298,7 @@ export function writeBrief(dir, b) {
     "",
     b.notes || "",
     "",
-    ...(b.designSystems?.length ? ["## Designsystem för den här filmen", "", "Utöver kundens (brand/profile.json). Läs dem före manus, bildprompter och scener.", "", ...b.designSystems.map((d) => `- ${d.url}`), ""] : []),
+    ...(b.designSystems?.length ? ["## Designsystem för den här filmen", "", "Utöver avsändarens (brand/profile.json). Läs dem före manus, bildprompter och scener.", "", ...b.designSystems.map((d) => `- ${d.url}`), ""] : []),
   ];
   writeFileSync(path.join(dir, "notes/brief.md"), lines.join("\n"));
 }

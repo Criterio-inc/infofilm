@@ -113,7 +113,7 @@ async function projectsPage() {
             <div class="small muted" style="margin-top:6px">${p.scenes ? `${p.scenes} scener · ${p.seconds} s` : ""} · ändrad ${ago(p.modified)}</div>
           </div>
         </a>`).join("")}</div>`
-      : `<div class="panel" style="text-align:center;padding:48px"><h2>Inga filmer än</h2><p class="muted">Börja med en kund, ett ämne och ett format, så tar Claude det därifrån.</p><a class="btn" href="#/new">+ Skapa din första film</a></div>`}
+      : `<div class="panel" style="text-align:center;padding:48px"><h2>Inga filmer än</h2><p class="muted">Börja med en avsändare, ett ämne och ett format, så tar Claude det därifrån.</p><a class="btn" href="#/new">+ Skapa din första film</a></div>`}
     </div>`;
   if (list.some((p) => p.running)) refreshTimer = setInterval(() => location.hash.slice(1) === "/" || !location.hash ? projectsPage() : null, 5000);
 }
@@ -123,10 +123,10 @@ function newPage() {
   const profiles = state.profiles.filter((p) => !p.template || p.id === "_mall");
   app.innerHTML = `
     <form class="panel stack" id="newf" style="max-width:820px;margin:0 auto">
-      <div><h1>Ny film</h1><p class="muted">Projektet skapas i ${esc(state.config.filmsPath)}, i kundens profil.</p></div>
+      <div><h1>Ny film</h1><p class="muted">Projektet skapas i ${esc(state.config.filmsPath)}, i avsändarens profil.</p></div>
       <div>
         <label>Titel</label><input type="text" name="title" required placeholder="Budgeten på en minut">
-        <label>Kund <span class="hint">– profilen styr färger, typsnitt, logga, bildstil och röst</span></label>
+        <label>Avsändare <span class="hint">– profilen styr färger, typsnitt, logga, bildstil och röst</span></label>
         <select name="profile">${profiles.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${p.placeholder ? " (platshållare)" : ""}${p.template ? " – mall" : ""}</option>`).join("")}</select>
         <div class="small muted" id="profinfo" style="margin-top:6px"></div>
       </div>
@@ -154,7 +154,7 @@ function newPage() {
         </div>
         <label>Underlag <span class="hint">– länkar, siffror, källor, vad som måste med eller inte får sägas</span></label><textarea name="notes"></textarea>
         <label>Bakgrundsmusik <span class="hint">– en lugn slinga lågt under rösten, eller ingen</span></label><select name="music" id="musicsel"></select>
-        <label>Designsystem <span class="hint">– valfritt: länkar eller mappar för just den här filmen, utöver kundens (en per rad). Claude läser dem före manus, bildprompter och scener.</span></label><textarea name="designSystems" rows="2" placeholder="https://claude.ai/…"></textarea>
+        <label>Designsystem <span class="hint">– valfritt: länkar eller mappar för just den här filmen, utöver avsändarens (en per rad). Claude läser dem före manus, bildprompter och scener.</span></label><textarea name="designSystems" rows="2" placeholder="https://claude.ai/…"></textarea>
       </div>
       <label class="row" style="font-weight:400"><input type="checkbox" name="startClaude" checked> Låt Claude börja direkt med research och manus (kostar inget extra utöver ditt Claude-abonnemang)</label>
       <div class="row"><button class="primary" type="submit">Skapa filmen</button><span class="muted small" id="newstatus"></span></div>
@@ -170,7 +170,7 @@ function newPage() {
     const ds = p?.designSystems ? ` · ${p.designSystems === 1 ? "ett länkat designsystem" : `${p.designSystems} länkade designsystem`}` : "";
     const loops = p?.loops || [];
     $("#musicsel").innerHTML = [["none", "Ingen bakgrundsmusik"], ...loops.map((m) => [m.key, `Slingan ${m.label}`])].map(([v, l]) => `<option value="${esc(v)}" ${v === (p?.loop || "none") ? "selected" : ""}>${esc(l)}</option>`).join("")
-      + (loops.length ? "" : `<option disabled>Kunden har inga slingor än – lägg till under Kunder</option>`);
+      + (loops.length ? "" : `<option disabled>Avsändaren har inga slingor än – lägg till under Avsändare</option>`);
     $("#profinfo").innerHTML = p ? `${swatch(p.palette)} ${p.placeholder ? `<span class="warn">Profilen har platshållare för färger och logga – fyll i den innan filmen ska ut.</span>` : esc(p.language || "")}${ds}` : "";
   };
   f.addEventListener("change", (e) => {
@@ -210,7 +210,7 @@ const viewStep = {}; // the step the user looks at, per film (else the next one 
 const STEP_INTRO = {
   script: "Claude tar fram fakta ur källor och skriver manuset utifrån briefen. Du läser och godkänner.",
   voice: "Berättaren läser manuset scen för scen. Du lyssnar innan du går vidare.",
-  images: "En illustration per scen i kundens bildstil. Siffror och rubriker ritas ovanpå i filmen, aldrig i bilden.",
+  images: "En illustration per scen i avsändarens bildstil. Siffror och rubriker ritas ovanpå i filmen, aldrig i bilden.",
   review: "Claude bygger scenerna: rubriker, diagram och siffror som dyker upp när berättaren säger dem. Sedan tittar du på en snabbversion.",
   deliver: "De färdiga filmerna i alla format, med jämn ljudnivå och undertexter.",
 };
@@ -327,7 +327,7 @@ async function projectPage(id) {
   if (view === "images") {
     if (!p.shots) {
       card.title = "Låt Claude beskriva bilderna";
-      card.text = "Claude skriver en bildbeskrivning per scen i kundens bildstil. Du läser dem innan något kostar pengar.";
+      card.text = "Claude skriver en bildbeskrivning per scen i avsändarens bildstil. Du läser dem innan något kostar pengar.";
       card.facts = ["Tar någon minut", "Ingår i ditt Claude-abonnemang"];
       card.main = run('data-preset="shots"', "Beskriv bilderna");
     } else if (missingImgs) {
@@ -366,7 +366,7 @@ async function projectPage(id) {
     card.more = `<div class="row"><label style="margin:0">Bakgrundsmusik</label><select id="bedsel" style="width:auto" ${busy ? "disabled" : ""}>${[["", "Ingen"], ...ms.loops.map((m) => [m.key, /^bed-eget-/.test(m.key) ? m.label : `Slingan ${m.label}`])].map(([v, l]) => `<option value="${esc(v)}" ${v === ms.bed ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
       ${ms.loops.find((m) => m.key === ms.bed && m.src) ? `<audio controls preload="none" src="${fileUrl(id, ms.loops.find((m) => m.key === ms.bed && m.src).src)}" style="flex:1;min-width:200px"></audio>` : ""}
       <label class="btn" style="margin:0">Ladda upp eget ljud<input type="file" id="ownaudio" accept=".wav,.mp3,.m4a,.aif,.aiff,.flac" hidden ${busy ? "disabled" : ""}></label></div>
-      <p class="small muted" style="margin:6px 0 0">${ms.loops.length ? "Ett eget ljud gäller bara den här filmen. Musiken ligger lågt under rösten och lite högre i pauserna." : `Kunden har inga slingor än: ladda upp ett eget ljud här, eller lägg till slingor under Kunder → ${esc(p.profileName)} → Musik.`}</p>`;
+      <p class="small muted" style="margin:6px 0 0">${ms.loops.length ? "Ett eget ljud gäller bara den här filmen. Musiken ligger lågt under rösten och lite högre i pauserna." : `Avsändaren har inga slingor än: ladda upp ett eget ljud här, eller lägg till slingor under Avsändare → ${esc(p.profileName)} → Musik.`}</p>`;
     if (p.preview) card.body = `<video id="previewvid" controls preload="metadata" src="${fileUrl(id, p.preview.path, p.preview.mtime)}"></video>`;
   }
 
@@ -506,7 +506,7 @@ async function projectPage(id) {
   });
   app.querySelector("[data-voice-profile]")?.addEventListener("click", async () => {
     if (!(await ask({ title: "Spara som standardröst?", text: `Kommande filmer för ${p.profileName} får samma berättare, utan nya röstprov.`, ok: "Spara" }))) return;
-    api(`projects/${enc}/voice-to-profile`, { body: {} }).then(() => toast("Sparad i kundprofilen"), (e) => toast(e.message));
+    api(`projects/${enc}/voice-to-profile`, { body: {} }).then(() => toast("Sparad i avsändarens profil"), (e) => toast(e.message));
   });
   app.querySelectorAll("[data-chip]").forEach((b) => b.addEventListener("click", () => claude(b.dataset.chip)));
   $("#ask").addEventListener("submit", (e) => {
@@ -609,8 +609,8 @@ async function customersPage() {
   const { root, profiles } = await api("profiles");
   app.innerHTML = `
     <div class="stack">
-      <div class="spread"><div><h1>Kunder</h1><p class="muted">En profil per kund: färger, typsnitt, logga, bildstil, röst och tonalitet. Egna profiler sparas i ${esc(root)}.</p></div></div>
-      <form class="panel row" id="newk"><input type="text" name="name" placeholder="Ny kund, t.ex. Borås Stad" style="flex:1;min-width:220px" required><button class="primary">+ Skapa kundprofil</button></form>
+      <div class="spread"><div><h1>Avsändare</h1><p class="muted">En profil per avsändare, till exempel ett företag, en kund eller ett eget tema för en rolig film. Profilen håller färger, typsnitt, logga, bildstil, röst och tonalitet. Egna profiler sparas i ${esc(root)}.</p></div></div>
+      <form class="panel row" id="newk"><input type="text" name="name" placeholder="Ny avsändare, t.ex. Borås Stad eller Kräftskivan" style="flex:1;min-width:220px" required><button class="primary">+ Skapa profil</button></form>
       <div id="newklog"></div>
       <div class="grid">${profiles.map((p) => `
         <a class="panel card" href="#/kund/${encodeURIComponent(p.id)}">
@@ -656,19 +656,19 @@ async function customerPage(id) {
     <div class="stack">
       <div class="spread">
         <div><h1>${esc(P.name || id)}</h1><div class="muted">${swatch({ band: pal.band, primary: pal.primary, accent: pal.accent, surface: pal.surfaceLight, backdrop: pal.backdrop })} ${esc(id)} · ${k.own ? "egen profil" : "inbyggd – sparas som egen kopia när du ändrar"}</div></div>
-        <div class="row"><a class="btn" href="#/kunder">← Kunder</a><a class="btn" href="#/new">+ Ny film</a></div>
+        <div class="row"><a class="btn" href="#/kunder">← Avsändare</a><a class="btn" href="#/new">+ Ny film</a></div>
       </div>
-      ${/PLACEHOLDER/i.test(P._doc || "") ? `<div class="panel banner small"><b>Platshållare.</b> Färger, typsnitt och logga är inte kundens egna än. Ladda upp kundens material nedan och låt Claude bygga profilen, eller fyll i själv.</div>` : ""}
+      ${/PLACEHOLDER/i.test(P._doc || "") ? `<div class="panel banner small"><b>Platshållare.</b> Färger, typsnitt och logga är inte avsändarens egna än. Ladda upp avsändarens material nedan och låt Claude bygga profilen, eller fyll i själv.</div>` : ""}
       <div class="cols">
         <form class="panel" id="kf">
           <div class="section">
-            <h2>1 · Kundens material</h2>
+            <h2>1 · Avsändarens material</h2>
             <p class="small muted">Grafisk manual (PDF), loggor, typsnitt, exempelbilder, presentationer – det Claude ska bygga profilen av. Sparas bara på den här datorn.</p>
             <div class="drop" id="drop">Släpp filer här eller <label class="link" style="display:inline;margin:0;font-weight:600;cursor:pointer">välj filer<input type="file" id="mat" multiple hidden></label></div>
             ${k.material.length ? `<table style="margin-top:8px">${k.material.map((m) => `<tr><td>${/\.(png|jpe?g|svg|gif|webp)$/i.test(m.name) ? `<img src="${pfileUrl(id, m.path)}" style="height:28px;vertical-align:middle;margin-right:8px;border-radius:4px">` : "📄 "}${esc(m.name)}</td><td class="muted small">${m.size < 1e6 ? `${Math.max(1, Math.round(m.size / 1e3))} kB` : `${(m.size / 1e6).toFixed(1)} MB`}</td><td><button type="button" class="link danger small" data-rm="${esc(m.path)}">ta bort</button></td></tr>`).join("")}</table>` : ""}
-            <label>Länkar <span class="hint">– kundens webbplats, grafisk profil online, exempel (en per rad)</span></label>
+            <label>Länkar <span class="hint">– avsändarens webbplats, grafisk profil online, exempel (en per rad)</span></label>
             <textarea name="links" rows="2" placeholder="https://www.exempel.se">${esc(k.links)}</textarea>
-            <label>Designsystem <span class="hint">– kundens designsystem: en länk (Claude Design, webben) eller en mapp på datorn (~/…), en per rad. Claude läser dem när profilen byggs och före varje manus, bildprompt och scen. En claude.ai-länk synkas från Claude Code, som sparar en ögonblicksbild i profilen.</span></label>
+            <label>Designsystem <span class="hint">– avsändarens designsystem: en länk (Claude Design, webben) eller en mapp på datorn (~/…), en per rad. Claude läser dem när profilen byggs och före varje manus, bildprompt och scen. En claude.ai-länk synkas från Claude Code, som sparar en ögonblicksbild i profilen.</span></label>
             <textarea name="design_systems" rows="2" placeholder="https://claude.ai/… eller ~/Projects/…">${esc(DS.map((d) => d.url).join("\n"))}</textarea>
             ${DS.length ? `<div class="small muted">${DS.map((d) => `${esc(d.name || d.url)}: ${d.syncedAt ? `synkat ${esc(d.syncedAt)}` : "inte synkat än"}`).join("<br>")}</div>` : ""}
           </div>
@@ -699,7 +699,7 @@ async function customerPage(id) {
           <div class="section">
             <h2>4 · Form och rörelse</h2>
             <div class="two">
-              <div><label>Rörelse</label>${sel("motion", P.motion || "slide", [["slide", "Lugn glidning (de flesta kunder)"], ["deal", "Kort som delas ut (journalfilm)"]])}</div>
+              <div><label>Rörelse</label>${sel("motion", P.motion || "slide", [["slide", "Lugn glidning (passar de flesta)"], ["deal", "Kort som delas ut (journalfilm)"]])}</div>
               <div><label>Bakgrund</label>${sel("backdrop", P.backdrop || "plain", [["plain", "Enkel gradient"], ["starbursts", "Stjärnor (journalfilm)"]])}</div>
               <div><label>Utan bild</label>${sel("ground", P.ground || "soft", [["soft", "Mjuka cirklar i profilens färger"], ["starburst", "Solfjäder (journalfilm)"]])}</div>
               <div><label>Kortets hörn</label>${sel("radius", String(P.card?.radius ?? 14), [["0", "Raka"], ["2", "Nästan raka"], ["8", "Lätt rundade"], ["14", "Rundade"], ["26", "Mycket rundade"]])}</div>
@@ -728,7 +728,7 @@ async function customerPage(id) {
             <textarea name="v_description" rows="3">${esc(k.design.description || "")}</textarea>
             <label>Provtext</label>
             <textarea name="v_text" rows="2">${esc(k.design.text || "")}</textarea>
-            <div class="two"><div><label>Färdig röst: Voice ID <span class="hint">– kundens standardröst</span></label><input type="text" name="v_id" value="${esc(k.voice?.voice_id || "")}"></div>
+            <div class="two"><div><label>Färdig röst: Voice ID <span class="hint">– avsändarens standardröst</span></label><input type="text" name="v_id" value="${esc(k.voice?.voice_id || "")}"></div>
               <div><label>Röstens namn</label><input type="text" name="v_name" value="${esc(k.voice?.name || "")}"></div></div>
           </div>
 
@@ -838,7 +838,7 @@ async function customerPage(id) {
     try {
       const r = await api(`${base}/save`, { body });
       toast(r.job ? "Sparat – hämtar typsnitten" : "Sparat");
-      if (id !== "_mall" && !k.own) toast("Sparat som egen kopia i dina kundprofiler");
+      if (id !== "_mall" && !k.own) toast("Sparat som egen kopia bland dina profiler");
       reload();
     } catch (err) {
       toast(err.message);
@@ -854,7 +854,7 @@ async function customerPage(id) {
     }
   };
   app.querySelector("[data-build]")?.addEventListener("click", () => {
-    if (!k.material.length && !k.links.trim() && !DS.length) return toast("Ladda upp kundens material eller skriv en länk först");
+    if (!k.material.length && !k.links.trim() && !DS.length) return toast("Ladda upp avsändarens material eller skriv en länk först");
     claude({ preset: "build" });
   });
   app.querySelector("[data-sync]")?.addEventListener("click", () => claude({ preset: "sync" }));
@@ -883,7 +883,7 @@ function settingsPage() {
       <form class="panel" id="setf">
         <h2>Mappar</h2>
         <label>Filmer <span class="hint">– där projekten skapas</span></label><input type="text" name="filmsDir" value="${esc(c.filmsDir)}">
-        <label>Egna kundprofiler <span class="hint">– valfritt, t.ex. en privat mapp eller ett privat repo (INFOFILM_PROFILES)</span></label><input type="text" name="profilesDir" value="${esc(c.profilesDir)}" placeholder="~/Kundprofiler">
+        <label>Mapp för egna profiler <span class="hint">– valfritt, t.ex. en privat mapp eller ett privat repo (INFOFILM_PROFILES)</span></label><input type="text" name="profilesDir" value="${esc(c.profilesDir)}" placeholder="~/Kundprofiler">
         <h2 style="margin-top:20px">API-nycklar</h2>
         <p class="small muted">Sparas bara på den här datorn, i ~/.infofilm/secrets.json (läsbar endast för dig). Lämna tomt för att behålla.</p>
         <label>ElevenLabs <span class="hint">– berättarröst · ${esc(state.keys.ELEVENLABS_API_KEY || "saknas")}</span></label><input type="password" name="ELEVENLABS_API_KEY" autocomplete="off">
@@ -895,8 +895,8 @@ function settingsPage() {
         </details>
         <div class="row" style="margin-top:16px"><button class="primary">Spara</button><button type="button" class="danger" data-quit>Avsluta appen</button></div>
       </form>
-      <div class="panel small"><h2>Kundprofiler</h2>${state.profiles.map((p) => `<div class="spread" style="padding:4px 0"><span>${swatch(p.palette)} <b>${esc(p.name)}</b> <span class="muted">${esc(p.id)}</span></span>${p.placeholder ? '<span class="warn">platshållare</span>' : ""}</div>`).join("")}
-        <p class="muted" style="margin-top:10px">Ny kund: be Claude i en film, eller kör <code>scripts/new_profile.sh</code>. Profilredigering i appen kommer i nästa version.</p></div>
+      <div class="panel small"><h2>Avsändarprofiler</h2>${state.profiles.map((p) => `<div class="spread" style="padding:4px 0"><span>${swatch(p.palette)} <b>${esc(p.name)}</b> <span class="muted">${esc(p.id)}</span></span>${p.placeholder ? '<span class="warn">platshållare</span>' : ""}</div>`).join("")}
+        <p class="muted" style="margin-top:10px">Ny avsändare: be Claude i en film, eller kör <code>scripts/new_profile.sh</code>. Profilredigering i appen kommer i nästa version.</p></div>
     </div>`;
   $("[data-recheck]").addEventListener("click", async () => {
     state = await api("state?recheck=1");

@@ -98,7 +98,7 @@ export function runAction(id, action, args = {}) {
         // a loop the client got after this film was made: copy it in from the profile
         const pm = path.join(profileDir(film.profile), "music");
         const pc = JSON.parse(readFileSync(path.join(pm, "cuts.json"), "utf8"))[key];
-        if (!pc || !existsSync(path.join(pm, path.basename(pc.file)))) throw Object.assign(new Error("den slingan finns inte hos kunden"), { status: 400 });
+        if (!pc || !existsSync(path.join(pm, path.basename(pc.file)))) throw Object.assign(new Error("den slingan finns inte hos avsändaren"), { status: 400 });
         mkdirSync(path.join(dir, "music/suno"), { recursive: true });
         copyFileSync(path.join(pm, path.basename(pc.file)), path.join(dir, "music/suno", path.basename(pc.file)));
         cuts[key] = { ...pc, file: `suno/${path.basename(pc.file)}` };
