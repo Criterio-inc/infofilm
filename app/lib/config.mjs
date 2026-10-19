@@ -1,4 +1,6 @@
-// Settings live in ~/.infofilm/: config.json (folders, port) and secrets.json (API keys, mode 600).
+// Settings live in ~/.infofilm/: config.json (folders, port). API keys live encrypted in the macOS
+// keychain (service "infofilm", one item per key); elsewhere, or for an old install, in secrets.json (mode 600).
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -34,8 +36,31 @@ export function saveConfig(patch) {
   writeFileSync(CONFIG, JSON.stringify(cur, null, 2) + "\n");
 }
 
+const KEYCHAIN = "infofilm";
+const MAC = process.platform === "darwin";
+let kc = null;
+let kcAt = 0;
+
+/** The keys in the keychain, read with Apple's own security tool (no prompt for its own items). */
+function keychain() {
+  if (!MAC) return {};
+  if (kc && Date.now() - kcAt < 30000) return kc;
+  kc = {};
+  for (const k of KEYS) {
+    try {
+      const v = execFileSync("security", ["find-generic-password", "-s", KEYCHAIN, "-a", k, "-w"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+      if (v) kc[k] = v;
+    } catch {
+      /* not in the keychain */
+    }
+  }
+  kcAt = Date.now();
+  return kc;
+}
+
+/** The keys the tools get: the keychain first, then an old secrets.json (the environment comes after, in toolEnv). */
 export function loadSecrets() {
-  return readJson(SECRETS, {});
+  return { ...readJson(SECRETS, {}), ...keychain() };
 }
 
 // a free call per service that tells a working key from a wrong one (no credits used)
@@ -60,13 +85,26 @@ export async function checkKey(k, value) {
 
 export function saveSecrets(patch) {
   mkdirSync(HOME_DIR, { recursive: true });
-  const cur = loadSecrets();
+  const file = readJson(SECRETS, {});
   for (const k of KEYS) {
     if (typeof patch[k] !== "string") continue;
-    if (patch[k].trim()) cur[k] = patch[k].trim();
-    else delete cur[k];
+    const v = patch[k].trim();
+    if (MAC) {
+      // the keychain holds it; the old plain-text copy goes
+      if (v) execFileSync("security", ["add-generic-password", "-U", "-s", KEYCHAIN, "-a", k, "-l", `Infofilm ${k}`, "-w", v], { stdio: "ignore" });
+      else {
+        try {
+          execFileSync("security", ["delete-generic-password", "-s", KEYCHAIN, "-a", k], { stdio: "ignore" });
+        } catch {
+          /* was not there */
+        }
+      }
+      delete file[k];
+    } else if (v) file[k] = v;
+    else delete file[k];
   }
-  writeFileSync(SECRETS, JSON.stringify(cur, null, 2) + "\n", { mode: 0o600 });
+  kc = null;
+  writeFileSync(SECRETS, JSON.stringify(file, null, 2) + "\n", { mode: 0o600 });
   chmodSync(SECRETS, 0o600);
 }
 
