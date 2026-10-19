@@ -1,5 +1,6 @@
 // Film projects in the films folder: listing, status, and the actions the app can run on one.
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { loadConfig, SKILL_DIR } from "./config.mjs";
 
@@ -22,16 +23,21 @@ const readJson = (f, fallback = null) => {
 
 export const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
-/** Links to design systems (Claude Design or the web), from a textarea or a list, as
- * [{ url, name?, syncedAt? }]. What is already known about a link (its name, when it was synced) is kept. */
+/** Design systems (Claude Design, the web, or a folder on this computer), from a textarea or a list,
+ * as [{ url, name?, syncedAt?, file? }]: url is a link (https://…) or a folder (~/… or /…).
+ * What is already known about one (its name, when it was synced, its snapshot) is kept. */
 export function designLinks(input, current = []) {
   const known = new Map((current || []).map((d) => (typeof d === "string" ? { url: d } : d)).filter((d) => d?.url).map((d) => [d.url, d]));
-  const raw = Array.isArray(input) ? input.map((d) => (typeof d === "string" ? d : d?.url)) : String(input || "").split(/\s+/);
-  const urls = [...new Set(raw.map((u) => String(u || "").trim()).filter(Boolean))];
-  const bad = urls.find((u) => !/^https?:\/\/[^\s/]+\.[^\s]+$/i.test(u));
-  if (bad) throw Object.assign(new Error(`"${bad.slice(0, 80)}" är ingen webblänk (https://…)`), { status: 400 });
+  const raw = Array.isArray(input) ? input.map((d) => (typeof d === "string" ? d : d?.url)) : String(input || "").split(/\n+/);
+  const urls = [...new Set(raw.map((u) => String(u || "").trim().replace(/\/+$/, "")).filter(Boolean))];
+  const bad = urls.find((u) => !/^https?:\/\/[^\s/]+\.\S+$/i.test(u) && !/^(~|\/)\S/.test(u));
+  if (bad) throw Object.assign(new Error(`"${bad.slice(0, 80)}" är varken en webblänk (https://…) eller en mapp (~/… eller /…)`), { status: 400 });
   return urls.map((url) => known.get(url) || { url });
 }
+
+/** The folders among a profile's or film's design systems, with ~ expanded (Claude may read them). */
+export const designFolders = (list) =>
+  (list || []).map((d) => (typeof d === "string" ? d : d?.url)).filter((u) => /^(~|\/)/.test(u || "")).map((u) => (u.startsWith("~") ? path.join(os.homedir(), u.slice(1)) : u)).filter((p) => existsSync(p));
 
 /** The project folder for an id, or a 404. Ids are folder names directly under the films folder. */
 export function projectDir(id) {

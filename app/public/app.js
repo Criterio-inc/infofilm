@@ -155,7 +155,7 @@ function newPage() {
           <div><label>Syfte <span class="hint">– det tittaren ska ta med sig</span></label><input type="text" name="purpose"></div>
         </div>
         <label>Underlag <span class="hint">– länkar, siffror, källor, vad som måste med eller inte får sägas</span></label><textarea name="notes"></textarea>
-        <label>Designsystem <span class="hint">– valfritt: länkar för just den här filmen, utöver kundens (en per rad). Claude läser dem före manus, bildprompter och scener.</span></label><textarea name="designSystems" rows="2" placeholder="https://claude.ai/…"></textarea>
+        <label>Designsystem <span class="hint">– valfritt: länkar eller mappar för just den här filmen, utöver kundens (en per rad). Claude läser dem före manus, bildprompter och scener.</span></label><textarea name="designSystems" rows="2" placeholder="https://claude.ai/…"></textarea>
       </div>
       <label class="row" style="font-weight:400"><input type="checkbox" name="startClaude" checked> Låt Claude börja direkt med research och manus (kostar inget extra utöver ditt Claude-abonnemang)</label>
       <div class="row"><button class="primary" type="submit">Skapa filmen</button><span class="muted small" id="newstatus"></span></div>
@@ -499,8 +499,8 @@ async function customerPage(id) {
             ${k.material.length ? `<table style="margin-top:8px">${k.material.map((m) => `<tr><td>${/\.(png|jpe?g|svg|gif|webp)$/i.test(m.name) ? `<img src="${pfileUrl(id, m.path)}" style="height:28px;vertical-align:middle;margin-right:8px;border-radius:4px">` : "📄 "}${esc(m.name)}</td><td class="muted small">${m.size < 1e6 ? `${Math.max(1, Math.round(m.size / 1e3))} kB` : `${(m.size / 1e6).toFixed(1)} MB`}</td><td><button type="button" class="link danger small" data-rm="${esc(m.path)}">ta bort</button></td></tr>`).join("")}</table>` : ""}
             <label>Länkar <span class="hint">– kundens webbplats, grafisk profil online, exempel (en per rad)</span></label>
             <textarea name="links" rows="2" placeholder="https://www.exempel.se">${esc(k.links)}</textarea>
-            <label>Designsystem <span class="hint">– länkar till kundens designsystem i Claude Design eller på webben (en per rad). Claude läser dem när profilen byggs och före varje manus, bildprompt och scen. En claude.ai-länk synkas från Claude Code, som sparar en ögonblicksbild i profilen.</span></label>
-            <textarea name="design_systems" rows="2" placeholder="https://claude.ai/…">${esc(DS.map((d) => d.url).join("\n"))}</textarea>
+            <label>Designsystem <span class="hint">– kundens designsystem: en länk (Claude Design, webben) eller en mapp på datorn (~/…), en per rad. Claude läser dem när profilen byggs och före varje manus, bildprompt och scen. En claude.ai-länk synkas från Claude Code, som sparar en ögonblicksbild i profilen.</span></label>
+            <textarea name="design_systems" rows="2" placeholder="https://claude.ai/… eller ~/Projects/…">${esc(DS.map((d) => d.url).join("\n"))}</textarea>
             ${DS.length ? `<div class="small muted">${DS.map((d) => `${esc(d.name || d.url)}: ${d.syncedAt ? `synkat ${esc(d.syncedAt)}` : "inte synkat än"}`).join("<br>")}</div>` : ""}
           </div>
 

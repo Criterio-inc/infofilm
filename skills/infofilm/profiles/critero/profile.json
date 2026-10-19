@@ -1,5 +1,5 @@
 {
-  "_doc": "Critero Consulting AB's own profile and the default for new films (scripts/new_film.sh). Colours, fonts and logo are taken from www.criteroconsulting.se (assets/css/site.css :root, assets/fonts, assets/img/logga) on 2026-10-19; NOTES.md maps each role to its CSS variable.",
+  "_doc": "Critero Consulting AB's own profile and the default for new films (scripts/new_film.sh). The look follows www.criteroconsulting.se (assets/css/site.css :root, assets/fonts, assets/img/logga, read 2026-10-19); the house design system (designSystems) fills what the site leaves open. NOTES.md maps each role to its source.",
   "name": "Critero Consulting AB",
   "language": "sv",
   "locale": "sv-SE",
@@ -8,7 +8,14 @@
     "16:9",
     "1:1"
   ],
-  "designSystems": [],
+  "designSystems": [
+    {
+      "url": "~/Projects/critero-design-system",
+      "name": "Critero Design System (husets system, main)",
+      "syncedAt": "2026-10-19",
+      "file": "design-systems/critero-design-system.md"
+    }
+  ],
   "palette": {
     "backdrop": "#F0EAD8",
     "backdropLight": "#F5F1E6",
@@ -23,7 +30,7 @@
     "accent": "#F49140",
     "accentDark": "#3D6E50",
     "signal": "#F49140",
-    "positive": "#3D6E50",
+    "positive": "#4A7A35",
     "highlight": "#86A893",
     "dim": "#F5F1E6",
     "faint": "#4D4B3E"
@@ -74,7 +81,7 @@
     "height": 48
   },
   "endCard": {
-    "line": "Boka ett första samtal",
+    "line": "Välkommen att höra av dig!",
     "url": "criteroconsulting.se"
   }
 }
