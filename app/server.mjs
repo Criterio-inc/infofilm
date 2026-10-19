@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { approve, createProject, PRESETS, reveal, revealFile, runAction, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
+import { approve, createProject, PRESETS, reveal, revealFile, runAction, uploadAudio, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
 import { APP_DIR, KEYS, SKILL_DIR, checkKey, loadConfig, loadSecrets, saveConfig, saveSecrets, toolEnv } from "./lib/config.mjs";
 import { getJob, projectJobs, runningJob, stopAll, stopJob, summary as jobSummary } from "./lib/jobs.mjs";
 import { detail, listProfiles, listProjects, projectDir, saveApp } from "./lib/projects.mjs";
@@ -15,8 +15,8 @@ import { startJob } from "./lib/jobs.mjs";
 const PORT = Number(process.env.INFOFILM_PORT || loadConfig().port || 4747);
 const PUBLIC = path.join(APP_DIR, "public");
 // files of a project the page may load: renders, stills, illustrations, narration, voice takes
-const SERVABLE = [/^out\/[^/]+\.(mp4|srt)$/, /^out\/preview\/preview\.mp4$/, /^out\/stills-[^/]+\/review\/[^/]+_review\.jpg$/, /^video\/public\/img\/[^/]+\.jpg$/, /^video\/public\/audio\/[^/]+\.mp3$/, /^voice\/previews\/[^/]+\.mp3$/];
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".mp4": "video/mp4", ".mp3": "audio/mpeg", ".srt": "text/plain; charset=utf-8", ".json": "application/json" };
+const SERVABLE = [/^out\/[^/]+\.(mp4|srt)$/, /^out\/preview\/preview\.mp4$/, /^music\/suno\/[^/]+\.(wav|mp3|m4a|aiff?|flac)$/i, /^out\/stills-[^/]+\/review\/[^/]+_review\.jpg$/, /^video\/public\/img\/[^/]+\.jpg$/, /^video\/public\/audio\/[^/]+\.mp3$/, /^voice\/previews\/[^/]+\.mp3$/];
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".mp4": "video/mp4", ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4", ".aif": "audio/aiff", ".aiff": "audio/aiff", ".flac": "audio/flac", ".srt": "text/plain; charset=utf-8", ".json": "application/json" };
 
 // ── checks: what the computer has, cached for a minute ──
 let checks = null;
@@ -205,6 +205,9 @@ async function api(req, res, url) {
     if (m === "POST" && parts[2] === "claude-reset") {
       saveApp(id, { claudeSession: null, claudeLast: null });
       return json(res, 200, { ok: true });
+    }
+    if (m === "POST" && parts[2] === "upload-audio") {
+      return json(res, 202, { job: jobSummary(uploadAudio(id, await body(req, 8e7))) });
     }
     if (m === "POST" && parts[2] === "approve") {
       approve(id, (await body(req)).step);

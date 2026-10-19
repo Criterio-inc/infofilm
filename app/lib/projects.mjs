@@ -23,6 +23,22 @@ const readJson = (f, fallback = null) => {
 
 export const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
+/** The background loops in a music folder: cuts.json keys that start with "bed" and whose file exists.
+ * In a profile the files lie next to cuts.json; in a film they lie in music/suno/ (as cuts.json says). */
+export function musicLoops(musicDir, { profile = false } = {}) {
+  const cuts = readJson(path.join(musicDir, "cuts.json"), {}) || {};
+  return Object.entries(cuts)
+    .filter(([k, c]) => /^bed/.test(k) && c?.file)
+    .map(([key, c]) => ({ key, label: c.label || key, file: profile ? path.basename(c.file) : c.file }))
+    .filter((m) => existsSync(path.join(musicDir, m.file)));
+}
+
+/** A profile's default loop: "music": {"bed": key} (null = no music); without the setting, "bed" if it exists. */
+export const defaultLoop = (prof, loops) => {
+  if (prof?.music && "bed" in prof.music) return loops.some((l) => l.key === prof.music.bed) ? prof.music.bed : "";
+  return loops.some((l) => l.key === "bed") ? "bed" : "";
+};
+
 /** Design systems (Claude Design, the web, or a folder on this computer), from a textarea or a list,
  * as [{ url, name?, syncedAt?, file? }]: url is a link (https://…) or a folder (~/… or /…).
  * What is already known about one (its name, when it was synced, its snapshot) is kept. */
@@ -66,6 +82,10 @@ export function listProfiles() {
         palette: { band: p.palette?.band, primary: p.palette?.primary, accent: p.palette?.accent, surface: p.palette?.surfaceLight, backdrop: p.palette?.backdrop },
         placeholder: /PLACEHOLDER/i.test(p._doc || ""),
         designSystems: (p.designSystems || []).length,
+        ...(() => {
+          const loops = musicLoops(path.join(root, name, "music"), { profile: true });
+          return { loops: loops.map(({ key, label }) => ({ key, label })), loop: defaultLoop(p, loops) };
+        })(),
       });
     }
   }
@@ -105,6 +125,27 @@ function steps(s) {
   return { list, current };
 }
 
+/** Claude has built the film's scenes when every scene (but the end card) has a component in the
+ * registries and the demo's scenes are no longer in them; the demo's files may stay on disk. */
+function scenesBuilt(dir, scenes) {
+  const reg = ["golden.ts", "registry.ts"].map((f) => read(path.join(dir, "video/src/scenes", f), "")).join("\n");
+  const names = scenes.map((s) => s.name).filter((n) => n && n !== "end-card");
+  return names.length > 0 && !/\b(TheYear|TheRule)\b/.test(reg) && names.every((n) => reg.includes(`"${n}"`) || new RegExp(`\\b${n.replace(/-/g, "_")}\\b`).test(reg));
+}
+
+/** The newest change to what the film is made of: script, film.json, profile, pictures, narration,
+ * music and the scenes' code. Generated files (the timeline, renders, stills) do not count. */
+function changedAt(dir) {
+  const skip = new Set(["node_modules", "timeline", "previews"]);
+  const newest = (p) => {
+    if (!existsSync(p)) return 0;
+    const st = statSync(p);
+    if (!st.isDirectory()) return st.mtimeMs;
+    return Math.max(0, ...readdirSync(p).filter((n) => !n.startsWith(".") && !skip.has(n)).map((n) => newest(path.join(p, n))));
+  };
+  return Math.max(...["script", "film.json", "brand", "art/img", "art/shots.json", "voice/scenes", "voice/voice.json", "music/cuts.json", "music/suno", "video/src"].map((r) => newest(path.join(dir, r))));
+}
+
 const mtime = (f) => (existsSync(f) ? statSync(f).mtimeMs : 0);
 
 export function summary(id) {
@@ -140,9 +181,9 @@ export function summary(id) {
     subtitles: files(outDir, /\.srt$/).filter((f) => f.size > 0),
     approved: app.approved || {},
     scriptMtime: mtime(path.join(dir, film.script || "script/script.md")),
-    timelineMtime: mtime(path.join(dir, "video/src/timeline/master.json")),
-    // the demo's golden scenes go when Claude builds the film's own
-    scenesBuilt: !existsSync(path.join(dir, "video/src/scenes/TheYear.tsx")),
+    // when the film last really changed: the timeline file itself is rebuilt by every render and preview
+    timelineMtime: changedAt(dir),
+    scenesBuilt: scenesBuilt(dir, scenes),
     preview: existsSync(preview) ? { path: path.relative(dir, preview), mtime: mtime(preview) } : null,
     modified: Math.max(statSync(path.join(dir, "film.json")).mtimeMs, ...renders.map((r) => r.mtime), existsSync(path.join(dir, "video/src/timeline/master.json")) ? statSync(path.join(dir, "video/src/timeline/master.json")).mtimeMs : 0),
   };
@@ -212,6 +253,20 @@ export function detail(id) {
     },
     shots: (readJson(path.join(dir, "art/shots.json"), []) || []).length,
     shotList: (readJson(path.join(dir, "art/shots.json"), []) || []).map((x) => ({ id: x.id, prompt: x.prompt })),
+    music: {
+      // the film's own loops, plus the client's that the film does not have yet (copied in when chosen)
+      loops: (() => {
+        const own = musicLoops(path.join(dir, "music")).map((m) => ({ ...m, src: `music/${m.file}` }));
+        let fromProfile = [];
+        try {
+          fromProfile = musicLoops(path.join(profileDir(s.profile), "music"), { profile: true }).filter((m) => !own.some((o) => o.key === m.key)).map(({ key, label }) => ({ key, label, src: null }));
+        } catch {
+          /* the film's profile is gone: its own loops are enough */
+        }
+        return [...own, ...fromProfile];
+      })(),
+      bed: Object.values(readJson(path.join(dir, "film.json"), {}).parts || {}).map((x) => x.bed).find((b) => b) || "",
+    },
     claudeSession: app.claudeSession || null,
     claudeLast: app.claudeLast || null,
   };
@@ -243,7 +298,7 @@ export function writeBrief(dir, b) {
     "",
     b.notes || "",
     "",
-    ...(b.designSystems?.length ? ["## Designsystem för den här filmen", "", "Utöver kundens (brand/profile.json). Läs dem före manus, bildprompter och scener.", "", ...b.designSystems.map((d) => `- ${d.url}`), ""] : []),
+    ...(b.designSystems?.length ? ["## Designsystem för den här filmen", "", "Utöver avsändarens (brand/profile.json). Läs dem före manus, bildprompter och scener.", "", ...b.designSystems.map((d) => `- ${d.url}`), ""] : []),
   ];
   writeFileSync(path.join(dir, "notes/brief.md"), lines.join("\n"));
 }

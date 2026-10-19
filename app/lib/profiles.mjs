@@ -6,7 +6,7 @@ import path from "node:path";
 import { claudeStep } from "./claude.mjs";
 import { HOME_DIR, SKILL_DIR, loadConfig } from "./config.mjs";
 import { startJob } from "./jobs.mjs";
-import { SAFE_ID, designLinks, listProfiles } from "./projects.mjs";
+import { SAFE_ID, defaultLoop, designLinks, listProfiles, musicLoops } from "./projects.mjs";
 
 const PREVIEW = path.join(HOME_DIR, "preview");
 const readJson = (f, fb = null) => {
@@ -74,6 +74,8 @@ export function readProfile(id) {
     material: files(d, "material").filter((f) => f.name !== "LINKS.md"),
     fonts: files(d, "fonts").filter((f) => /\.(woff2?|ttf|otf)$/i.test(f.name)),
     images: files(d, "img"),
+    loops: musicLoops(path.join(d, "music"), { profile: true }).map((m) => ({ ...m, path: `music/${m.file}` })),
+    loop: defaultLoop(prof, musicLoops(path.join(d, "music"), { profile: true })),
     stills,
     claudeSession: app.claudeSession || null,
     claudeLast: app.claudeLast || null,
@@ -115,6 +117,18 @@ export function saveProfile(id, b) {
     if (b.voice && b.voice.voice_id) writeJson(f, { ...readJson(f, {}), ...b.voice });
     else rmSync(f, { force: true });
   }
+  if (b.music) {
+    // the default loop ("" = no music in new films) and the loops' names
+    const f = path.join(d, "profile.json");
+    const cur = readJson(f, {});
+    if ("loop" in b.music) writeJson(f, { ...cur, music: { ...(cur.music || {}), bed: b.music.loop || null } });
+    if (b.music.labels) {
+      const cf = path.join(d, "music/cuts.json");
+      const cuts = readJson(cf, {});
+      for (const [k, label] of Object.entries(b.music.labels)) if (cuts[k]) cuts[k].label = String(label).slice(0, 40) || k;
+      writeJson(cf, cuts);
+    }
+  }
   if (typeof b.notes === "string") writeFileSync(path.join(d, "NOTES.md"), b.notes);
   if (typeof b.links === "string") {
     mkdirSync(path.join(d, "material"), { recursive: true });
@@ -123,7 +137,7 @@ export function saveProfile(id, b) {
   return { fontsChanged };
 }
 
-const KINDS = { material: "material", logo: ".", font: "fonts", image: "img" };
+const KINDS = { material: "material", logo: ".", font: "fonts", image: "img", music: "music" };
 
 /** A file from the page (base64). Logos land next to profile.json, fonts in fonts/, the rest in material/. */
 export function upload(id, { kind, name, data }) {
@@ -136,11 +150,21 @@ export function upload(id, { kind, name, data }) {
   if (!safe) throw err("filen saknar namn");
   if (kind === "logo" && !/\.(svg|png)$/i.test(safe)) throw err("loggan ska vara SVG eller PNG");
   if (kind === "font" && !/\.(woff2|woff|ttf|otf)$/i.test(safe)) throw err("typsnitt ska vara woff2, woff, ttf eller otf");
+  if (kind === "music" && !/\.(wav|mp3|m4a|aiff?|flac)$/i.test(safe)) throw err("musiken ska vara WAV, MP3, M4A, AIFF eller FLAC");
   const d = writableDir(id);
   const dir = path.join(d, KINDS[kind]);
   mkdirSync(dir, { recursive: true });
   const fileName = kind === "logo" ? `logo${path.extname(safe).toLowerCase()}` : safe;
   writeFileSync(path.join(dir, fileName), Buffer.from(String(data || ""), "base64"));
+  if (kind === "music") {
+    // a new background loop: its key is bed-<name>, its label the file's name; films find it in music/suno/
+    const cf = path.join(dir, "cuts.json");
+    const cuts = readJson(cf, {});
+    const stem = path.parse(fileName).name;
+    const key = "bed-" + stem.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    cuts[key] = { file: `suno/${fileName}`, label: stem.replace(/[-_]+/g, " ") };
+    writeJson(cf, cuts);
+  }
   if (kind === "logo") {
     const f = path.join(d, "profile.json");
     const cur = readJson(f, {});
@@ -150,8 +174,16 @@ export function upload(id, { kind, name, data }) {
 }
 
 export function removeFile(id, rel) {
-  if (!/^(material|img|fonts)\/[^/]+$/.test(rel || "") || rel.includes("..")) throw err("kan inte ta bort den filen");
-  rmSync(path.join(writableDir(id), rel), { force: true });
+  if (!/^(material|img|fonts|music)\/[^/]+$/.test(rel || "") || rel.includes("..") || rel === "music/cuts.json") throw err("kan inte ta bort den filen");
+  const d = writableDir(id);
+  rmSync(path.join(d, rel), { force: true });
+  if (rel.startsWith("music/")) {
+    // the loop goes from cuts.json too, and stops being the default
+    const cf = path.join(d, "music/cuts.json");
+    const cuts = readJson(cf, {});
+    for (const [k, c] of Object.entries(cuts)) if (c?.file && path.basename(c.file) === path.basename(rel)) delete cuts[k];
+    writeJson(cf, cuts);
+  }
 }
 
 /** A new profile from _mall, in the own profiles folder. */
@@ -162,10 +194,10 @@ export function createProfile(name) {
     .replace(/[̀-ͯ]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  if (!id) throw err("ange kundens namn");
+  if (!id) throw err("ange avsändarens namn");
   if (listProfiles().some((p) => p.id === id)) throw err(`det finns redan en profil som heter ${id}`, 409);
   mkdirSync(ownRoot(), { recursive: true });
-  const job = startJob(jobKey(id), "Ny kundprofil", [
+  const job = startJob(jobKey(id), "Ny profil", [
     { label: "Ny profil från _mall", cmd: "bash", args: [path.join(SKILL_DIR, "scripts/new_profile.sh"), id, "--name", String(name)], cwd: SKILL_DIR, env: { INFOFILM_PROFILES: ownRoot() } },
   ]);
   return { id, job };
@@ -186,7 +218,7 @@ export function profileClaude(id, prompt, title) {
 export const profilePrompt = () => PROFILE_PROMPT.replace("<skill>", SKILL_DIR);
 export const syncPrompt = () => SYNC_PROMPT.replace("<skill>", SKILL_DIR);
 const PROFILE_PROMPT =
-  "Bygg den här kundprofilen från kundens material: allt i material/ (grafisk manual, loggor, exempel, presentationer), länkarna i material/LINKS.md och anteckningarna i NOTES.md. Läs skillens profiles/README.md och references/style.md först. Fyll i profile.json (färger per roll, typsnitt, logga, kortform, rörelse, slutkort), style.json (bildstilen för illustrationerna och never-listan), design.json (berättarrösten) och NOTES.md (tonalitet, tilltal, ord, regler). Ta färger, typsnitt och logga ur materialet, gissa aldrig: det som saknas skriver du som en fråga sist i NOTES.md och i ditt svar. Finns det länkar i designSystems i profile.json, läs varje designsystem (eller dess ögonblicksbild i design-systems/) och synka in dess tokens enligt avsnittet ”Design systems” i profiles/README.md. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Kör sedan python3 <skill>/template/tools/fetch_fonts.py . för Google-typsnitten. Avsluta med en kort sammanfattning av profilen och vad du behöver från mig.";
+  "Bygg den här profilen från avsändarens material: allt i material/ (grafisk manual, loggor, exempel, presentationer), länkarna i material/LINKS.md och anteckningarna i NOTES.md. Läs skillens profiles/README.md och references/style.md först. Fyll i profile.json (färger per roll, typsnitt, logga, kortform, rörelse, slutkort), style.json (bildstilen för illustrationerna och never-listan), design.json (berättarrösten) och NOTES.md (tonalitet, tilltal, ord, regler). Ta färger, typsnitt och logga ur materialet, gissa aldrig: det som saknas skriver du som en fråga sist i NOTES.md och i ditt svar. Finns det länkar i designSystems i profile.json, läs varje designsystem (eller dess ögonblicksbild i design-systems/) och synka in dess tokens enligt avsnittet ”Design systems” i profiles/README.md. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Kör sedan python3 <skill>/template/tools/fetch_fonts.py . för Google-typsnitten. Avsluta med en kort sammanfattning av profilen och vad du behöver från mig.";
 
 /** The newest change in the skill's template (its code, not node_modules or renders). */
 function templateStamp(dir = path.join(SKILL_DIR, "template")) {
@@ -201,7 +233,7 @@ function templateStamp(dir = path.join(SKILL_DIR, "template")) {
 }
 
 const SYNC_PROMPT =
-  "Synka kundens designsystem in i profilen. Läs skillens profiles/README.md, avsnittet \"Design systems\". Läs varje länk i \"designSystems\" i profile.json: med verktyget Artifact (action read) om det är en claude.ai-länk, annars med WebFetch. Spara det du läste som en ögonblicksbild i design-systems/<kortnamn>.md (tokens med värden, typografi, form, bildspråk och tonalitet, och länken och datumet överst) och peka på den med \"file\" på länken. Mappa designsystemets tokens till profilens roller: färger till palette, typsnitt till fonts, hörnradie, kantlinjer och skuggor till card och plate, och bildspråk eller tonalitet till style.json och NOTES.md. Gissa inget: det som inte framgår skriver du som en fråga sist i NOTES.md. Skriv namnet, dagens datum (syncedAt) och ögonblicksbildens sökväg (file) på varje länk i designSystems, och en tabell i NOTES.md under \"Designsystem\" som visar vilken token som blev vilken roll och vad som skiljer mot hur profilen såg ut förut. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Har typsnitten ändrats, kör python3 <skill>/template/tools/fetch_fonts.py . Avsluta med en kort sammanfattning av vad som ändrades.";
+  "Synka avsändarens designsystem in i profilen. Läs skillens profiles/README.md, avsnittet \"Design systems\". Läs varje länk i \"designSystems\" i profile.json: med verktyget Artifact (action read) om det är en claude.ai-länk, annars med WebFetch. Spara det du läste som en ögonblicksbild i design-systems/<kortnamn>.md (tokens med värden, typografi, form, bildspråk och tonalitet, och länken och datumet överst) och peka på den med \"file\" på länken. Mappa designsystemets tokens till profilens roller: färger till palette, typsnitt till fonts, hörnradie, kantlinjer och skuggor till card och plate, och bildspråk eller tonalitet till style.json och NOTES.md. Gissa inget: det som inte framgår skriver du som en fråga sist i NOTES.md. Skriv namnet, dagens datum (syncedAt) och ögonblicksbildens sökväg (file) på varje länk i designSystems, och en tabell i NOTES.md under \"Designsystem\" som visar vilken token som blev vilken roll och vad som skiljer mot hur profilen såg ut förut. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Har typsnitten ändrats, kör python3 <skill>/template/tools/fetch_fonts.py . Avsluta med en kort sammanfattning av vad som ändrades.";
 
 /** Test stills: one small preview film (made once), switched to this profile, stills per format. */
 export function previewProfile(id) {
@@ -246,7 +278,7 @@ export function profileFile(id, rel) {
     if (!/^out\/stills-[^/]+\/review\/[^/]+_review\.jpg$/.test(r)) throw err("inte tillåtet", 403);
     return path.join(PREVIEW, r);
   }
-  if (!/^(logo\.(svg|png)|img\/[^/]+|material\/[^/]+)$/.test(rel) || rel.includes("..")) throw err("inte tillåtet", 403);
+  if (!/^(logo\.(svg|png)|img\/[^/]+|material\/[^/]+|music\/[^/]+\.(wav|mp3|m4a|aiff?|flac))$/i.test(rel) || rel.includes("..")) throw err("inte tillåtet", 403);
   return path.join(find(id).dir, rel);
 }
 

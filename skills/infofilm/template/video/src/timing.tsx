@@ -35,6 +35,8 @@ export type Timeline = {
   locale: string;
   fps: number;
   durationInFrames: number;
+  /** the final frames over which music and picture fade out (every film ends softly) */
+  fadeOutFrames?: number;
   music: Record<string, MusicCut>;
   scenes: SceneData[];
 };

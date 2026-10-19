@@ -31,6 +31,10 @@ from script_parse import parse  # noqa: E402
 EST_WPM = FILM.get("estWpm", 130)  # replace with the measured median once the narration exists
 LEAD, TAIL = FILM.get("lead", 24), FILM.get("tail", 18)  # frames before / after the speech: the card lands
 INTRO_AT = 8  # the opening theme starts 8 frames into its scene
+# every film ends softly, never cut off: the last card stays a while after the last word, and the
+# music and the picture fade out over the final seconds (film.json "endHold" / "fadeOut", in seconds)
+END_HOLD = round(FILM.get("endHold", 2.5) * FPS)
+FADE_OUT = round(FILM.get("fadeOut", 2.0) * FPS)
 TAG = re.compile(r"\[[^\]]*\]\s*")
 CUTS = {k: v for k, v in json.loads((ROOT / "music/cuts.json").read_text()).items() if not k.startswith("_")}
 PARTS = FILM.get("parts", {})
@@ -221,8 +225,11 @@ def main():
         })
         frame += total
 
+    if out:
+        out[-1]["durationInFrames"] += END_HOLD
+        frame += END_HOLD
     tl = {"title": FILM.get("title", ""), "locale": FILM.get("locale", "en-US"), "fps": FPS,
-          "durationInFrames": frame, "music": music, "scenes": out}
+          "durationInFrames": frame, "fadeOutFrames": min(FADE_OUT, frame), "music": music, "scenes": out}
     dst = ROOT / "video/src/timeline/master.json"
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(json.dumps(tl, ensure_ascii=False, indent=1), encoding="utf-8")

@@ -9,6 +9,8 @@ import { designFolders } from "./projects.mjs";
 const ALLOWED = [
   "Read", "Edit", "Write", "Glob", "Grep", "WebSearch", "WebFetch", "Artifact", "Agent", "Skill", "TodoWrite",
   "Bash(python3 tools/*)", "Bash(python3 voice/listen.py*)", "Bash(node tools/*)", "Bash(npx tsc*)",
+  // the same free tools for another format (FORMAT=1:1 …) or another stills folder
+  "Bash(FORMAT=* python3 tools/*)", "Bash(FORMAT=* node tools/*)", "Bash(STILLS_DIR=* node tools/*)", "Bash(FORMAT=* STILLS_DIR=* node tools/*)",
   "Bash(cd *)", "Bash(ls*)", "Bash(cat *)", "Bash(head *)", "Bash(tail *)", "Bash(wc *)", "Bash(grep *)",
   "Bash(mkdir *)", "Bash(cp *)", "Bash(mv *)", "Bash(ffprobe *)", "Bash(rm -rf ../out/stills*)",
 ];
@@ -25,7 +27,8 @@ const SYSTEM = (dir) => `You are running headless from the Infofilm app on the u
 - Free tools are fine: tools/build_timeline.py, cues.py, lint_cues.py, sync_art.py, node tools/stills.mjs and review.mjs, npx tsc.
 - Before writing the script, the image prompts (art/shots.json) or the scenes, read the linked design systems so the film follows them: tokens are already in the profile, but the design system also sets the tone, the layout and the picture language.
 ${DESIGN}
-- Write to the user in Swedish, short, and end with what they should do next in the app (for example: "Granska manuset och tryck på Röst → Vad kostar det?").`;
+- The app guides the user through five steps, and these are its only buttons: Manus ("Skriv manuset", "Manuset är klart"), Röst ("Gör tre röstprov", "Läs in rösten"), Bilder ("Beskriv bilderna", "Skapa bilderna", "Gör om"), Titta igenom ("Bygg scenerna", "Gör en snabbversion", "Ser bra ut", and the background-music choice) and Leverera ("Gör de färdiga filmerna"). Name only these; never "Rendera" or "Vad kostar det?".
+- Write to the user in Swedish, short, and end with what they should do next in the app (for example: "Gå till Titta igenom och tryck på Gör en snabbversion").`;
 
 // a client profile: read the client's material, write the profile files, fetch fonts and assets
 const ALLOWED_PROFILE = () => [
