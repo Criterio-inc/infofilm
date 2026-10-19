@@ -165,7 +165,12 @@ export function detail(id) {
       text: x.text,
     })),
     stills,
-    voice: { id: voice.voice_id && !/PUT-YOUR/.test(voice.voice_id) ? voice.voice_id : null, name: voice.name || null, previews },
+    voice: {
+      id: voice.voice_id && !/PUT-YOUR/.test(voice.voice_id) ? voice.voice_id : null,
+      name: voice.name || null,
+      previews,
+      design: readJson(path.join(dir, "voice/design.json"), {}),
+    },
     shots: (readJson(path.join(dir, "art/shots.json"), []) || []).length,
     claudeSession: app.claudeSession || null,
     claudeLast: app.claudeLast || null,

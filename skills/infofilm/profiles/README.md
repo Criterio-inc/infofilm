@@ -11,6 +11,9 @@ A profile holds everything a client keeps from film to film. `scripts/new_film.s
 Profiles are looked up in `$INFOFILM_PROFILES/<id>` first, then here. Point `INFOFILM_PROFILES` at a private folder or repository when client material should not live in the skill's repository.
 
 ## A new client
+In the Infofilm app: open **Kunder → + Skapa kundprofil**, upload the client's material (brand manual, logos, fonts, examples, links) and press **✦ Bygg profilen från materialet**. Then check the test stills. The app keeps its profiles in `~/Kundprofiler` (its `INFOFILM_PROFILES`).
+
+By hand:
 ```bash
 scripts/new_profile.sh boras-stad --name "Borås Stad"     # copies _mall, fetches the fonts
 ```

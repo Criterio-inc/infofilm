@@ -12,6 +12,8 @@ Infofilm-appen är ett litet lokalt skal runt infofilm-skillen. Den startas frå
 | **Förhandsgranska** | Startar Remotion Studio för projektet. |
 | **Stillbilder** | Visar sex bilder per scen i varje format. |
 | **Rendera** | Renderar alla format med en knapp och spelar upp resultatet. **Öppna leveransmappen** visar filerna i Finder. |
+| **Kunder** | En sida per kundprofil. Där laddar du upp kundens material: grafisk manual, loggor, typsnitt, exempelbilder och länkar. **✦ Bygg profilen från materialet** låter Claude fylla i färger, typsnitt, logga, bildstil, röst och tonalitet, och det som saknas skrivs som frågor. Du kan också justera allt själv, bland annat med färgväljare per färgroll, och se resultatet med **Rendera testbilder** i 16:9 och 1:1. Profilerna sparas i `~/Kundprofiler`, utanför repot. Inbyggda profiler, som `criterio`, kopieras dit när du ändrar dem. |
+| **Röst** | Under steget Röst på filmsidan skriver du röstbeskrivning och provtext, eller klistrar in ett färdigt Voice ID från ElevenLabs. **Spara som standardröst** lägger rösten i kundprofilen, så att kundens kommande filmer får samma berättare. |
 | **Inställningar** | Visar vad som saknas på datorn, och här anger du mappar och API-nycklar. Nycklarna sparas bara lokalt, i `~/.infofilm/secrets.json`. |
 
 ## Installera (en gång, på Macen)

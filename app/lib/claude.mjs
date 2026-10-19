@@ -20,7 +20,21 @@ const SYSTEM = (dir) => `You are running headless from the Infofilm app on the u
 - Free tools are fine: tools/build_timeline.py, cues.py, lint_cues.py, sync_art.py, node tools/stills.mjs and review.mjs, npx tsc.
 - Write to the user in Swedish, short, and end with what they should do next in the app (for example: "Granska manuset och tryck på Röst → Vad kostar det?").`;
 
-export function claudeStep(id, dir, prompt) {
+// a client profile: read the client's material, write the profile files, fetch fonts and assets
+const ALLOWED_PROFILE = () => [
+  "Read", "Edit", "Write", "Glob", "Grep", "WebSearch", "WebFetch", "TodoWrite",
+  `Bash(python3 ${SKILL_DIR}/template/tools/fetch_fonts.py*)`, "Bash(curl *)", "Bash(ls*)", "Bash(mkdir *)", "Bash(cp *)",
+  "Bash(mv *)", "Bash(file *)", "Bash(unzip *)", "Bash(sips *)", "Bash(cat *)", "Bash(head *)", "Bash(grep *)",
+];
+
+const SYSTEM_PROFILE = (dir) => `You are running headless from the Infofilm app on the user's computer, in the client profile folder ${dir} of the infofilm skill (${SKILL_DIR}: read profiles/README.md and references/style.md, and look at profiles/_mall and profiles/newsreel as examples).
+- The profile decides how every film for this client looks and sounds: profile.json (palette by role, fonts, logo, card, motion, end card), style.json (the illustration style and its never-list), design.json (the narrator brief, in English, for ElevenLabs Voice Design) and NOTES.md (tone of voice, address, words, approvals, allowed services).
+- The client's material is in material/ (brand manual PDFs, logos, example images, presentations) and material/LINKS.md (websites). Read all of it. Take colours, fonts and the logo from it; never invent a brand value. What the material does not settle goes, as a question, at the end of NOTES.md and of your answer.
+- The logo for the title band and the end card is logo.svg or logo.png in the profile folder (profile.json "logo.file"); it sits on the "band" colour, so pick the variant made for that background. You may download a logo or a font from the client's own website with curl.
+- A licensed font that is not on Google Fonts: use its files if they are in material/ or fonts/ (as "files" in profile.json); otherwise pick the closest Google font and note the substitution in NOTES.md.
+- You cannot ask questions while you work. Write to the user in Swedish, short, and end with what they should check or send next (for example: "Tryck på Testbilder och se om färgerna stämmer").`;
+
+export function claudeStep(id, dir, prompt, { kind = "film" } = {}) {
   if (!prompt || !String(prompt).trim()) throw Object.assign(new Error("skriv en instruktion"), { status: 400 });
   let session = null;
   try {
@@ -32,10 +46,10 @@ export function claudeStep(id, dir, prompt) {
     "-p", String(prompt),
     "--output-format", "stream-json", "--verbose",
     "--permission-mode", "dontAsk",
-    "--allowedTools", ALLOWED.join(","),
+    "--allowedTools", (kind === "profile" ? ALLOWED_PROFILE() : ALLOWED).join(","),
     "--disallowedTools", DENIED.join(","),
     "--add-dir", SKILL_DIR,
-    "--append-system-prompt", SYSTEM(dir),
+    "--append-system-prompt", kind === "profile" ? SYSTEM_PROFILE(dir) : SYSTEM(dir),
   ];
   if (session) args.push("--resume", session);
   // a server started from a terminal inside Claude Code must not hand that session's identity on

@@ -22,7 +22,9 @@ const readJson = (f, fallback) => {
 
 export function loadConfig() {
   const c = { filmsDir: "~/Filmer", profilesDir: "", port: 4747, browserExecutable: "", ...readJson(CONFIG, {}) };
-  return { ...c, filmsPath: path.resolve(expand(c.filmsDir)), profilesPath: c.profilesDir ? path.resolve(expand(c.profilesDir)) : "" };
+  // client profiles live outside the repo (no client material on GitHub, no clash with git pull)
+  if (!c.profilesDir) c.profilesDir = "~/Kundprofiler";
+  return { ...c, filmsPath: path.resolve(expand(c.filmsDir)), profilesPath: path.resolve(expand(c.profilesDir)) };
 }
 
 export function saveConfig(patch) {

@@ -70,12 +70,15 @@ async function route() {
   closeStream();
   clearInterval(refreshTimer);
   const h = location.hash.slice(1) || "/";
-  document.querySelectorAll("nav a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#${h}`));
+  document.querySelectorAll("nav a").forEach((a) => a.classList.toggle("on", a.getAttribute("href") === `#${h}` || (a.dataset.nav === "kunder" && h.startsWith("/kund"))));
   try {
     state = await api("state");
     if (h === "/") return await projectsPage();
     if (h === "/new") return newPage();
     if (h === "/settings") return settingsPage();
+    if (h === "/kunder") return await customersPage();
+    const k = h.match(/^\/kund\/([^/]+)$/);
+    if (k) return await customerPage(decodeURIComponent(k[1]));
     const m = h.match(/^\/p\/([^/]+)$/);
     if (m) return await projectPage(decodeURIComponent(m[1]));
     app.innerHTML = `<p class="pad">Sidan finns inte. <a href="#/">Till filmerna</a></p>`;
@@ -239,6 +242,17 @@ async function projectPage(id) {
               <div class="row"><button class="pay" data-pay="voice-preview" data-what="Tre provtagningar av berättarrösten (ElevenLabs Voice Design, ca några hundra krediter)" ${dis}>Designa röst: 3 provtagningar</button></div>
               ${p.voice.previews.length ? `<div class="stack" style="margin-top:10px">${p.voice.previews.map((v) => `<div class="row"><span class="small" style="width:120px">${esc(v.tag)} · tagning ${v.take}</span><audio controls preload="none" src="${fileUrl(id, v.src)}" style="flex:1;min-width:180px"></audio><button data-pick="${esc(v.generated_voice_id)}" ${dis}>Välj</button></div>`).join("")}</div>` : ""}`}
             <div id="gate-narrate"></div>
+            <details style="margin-top:10px" ${p.voice.id ? "" : "open"}><summary>Röstinställningar</summary>
+              <form id="voicef" class="stack" style="margin-top:8px">
+                <div><label>Beskrivning av berättaren <span class="hint">– på engelska: kön, ålder, klang, tempo, dialekt, tonläge</span></label>
+                  <textarea name="description" rows="4">${esc(p.voice.design.description || "")}</textarea></div>
+                <div><label>Provtext <span class="hint">– på filmens språk och i dess ton, läses i provtagningarna</span></label>
+                  <textarea name="text" rows="3">${esc(p.voice.design.text || "")}</textarea></div>
+                <div class="two"><div><label>… eller en färdig röst: Voice ID <span class="hint">– från ElevenLabs</span></label><input type="text" name="voice_id" value="${esc(p.voice.id || "")}" placeholder="t.ex. 21m00Tcm4TlvDq8ikWAM"></div>
+                  <div><label>Namn</label><input type="text" name="name" value="${esc(p.voice.name || "")}" placeholder="Berättare"></div></div>
+                <div class="row"><button class="primary" ${dis}>Spara rösten</button>${p.voice.id ? `<button type="button" data-voice-profile ${dis}>Spara som ${esc(p.profileName || "kundens")} standardröst</button>` : ""}</div>
+              </form>
+            </details>
             ${p.scenes.some((s) => s.audio) ? `<details style="margin-top:10px"><summary>Lyssna scen för scen</summary>${p.scenes.filter((s) => s.audio).map((s) => `<h3>${esc(s.id)} · ${esc(s.title)}</h3><audio controls preload="none" src="${fileUrl(id, s.audio)}"></audio><p class="small muted">${esc(s.text)}</p>`).join("")}</details>` : ""}
           </div>
 
@@ -322,6 +336,26 @@ async function projectPage(id) {
   }));
   app.querySelector("[data-act=narrate-dry]")?.addEventListener("click", () => gate("narrate-dry", "narrate", "#gate-narrate", "Berättarröst (ElevenLabs) – det här skulle debiteras:"));
   app.querySelector("[data-act=images-dry]")?.addEventListener("click", () => gate("images-dry", "images", "#gate-images", "Illustrationer (Gemini via OpenRouter, ca 0,14 USD per bild):"));
+  $("#voicef")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const fd = Object.fromEntries(new FormData(e.target).entries());
+    try {
+      await api(`projects/${encodeURIComponent(id)}/voice`, { body: fd });
+      toast(fd.voice_id ? "Rösten är sparad" : "Röstbeskrivningen är sparad");
+      reload();
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+  app.querySelector("[data-voice-profile]")?.addEventListener("click", async () => {
+    if (!(await ask({ title: "Spara som kundens standardröst?", text: `Kommande filmer för ${p.profileName} får samma berättare, utan ny röstdesign.`, ok: "Spara" }))) return;
+    try {
+      await api(`projects/${encodeURIComponent(id)}/voice-to-profile`, { body: {} });
+      toast("Sparad i kundprofilen");
+    } catch (err) {
+      toast(err.message);
+    }
+  });
   app.querySelectorAll("[data-pay]").forEach((b) => b.addEventListener("click", async () => {
     if (await ask({ title: "Det kostar pengar", text: b.dataset.what, ok: "Godkänn och kör", pay: true })) act(b.dataset.pay, { estimate: b.dataset.what });
   }));
@@ -386,6 +420,266 @@ function watchJob(jobId, el, done) {
 function closeStream() {
   stream?.close();
   stream = null;
+}
+
+// ── clients (profiles) ──
+const pfileUrl = (id, rel, v) => `/pfiles/${encodeURIComponent(id)}/${rel.split("/").map(encodeURIComponent).join("/")}${v ? `?v=${Math.round(v)}` : ""}`;
+
+// every colour role, in the order the editor shows them, with what it is for
+const ROLES = [
+  ["band", "Titel- och textband"], ["bandText", "Text i banden"], ["kicker", "Liten etikett i titelbandet"],
+  ["primary", "Huvudfärg: etiketter, ▲ ▼, viktiga former"], ["accent", "Accent"], ["accentDark", "Mörkare accent"], ["highlight", "Framhävning"],
+  ["signal", "Signal (sparsamt)"], ["positive", "Neutralt ”ja”"], ["ink", "Linjer och huvudtext"],
+  ["surfaceLight", "Plattor (ljusast)"], ["surface", "Kortet"], ["surfaceDark", "Mörkare yta"],
+  ["backdrop", "Bakgrunden bakom kortet"], ["backdropLight", "Bakgrund, ljusare del"], ["dim", "Bilden tonas mot (under plattor)"],
+];
+
+async function customersPage() {
+  const { root, profiles } = await api("profiles");
+  app.innerHTML = `
+    <div class="stack">
+      <div class="spread"><div><h1>Kunder</h1><p class="muted">En profil per kund: färger, typsnitt, logga, bildstil, röst och tonalitet. Egna profiler sparas i ${esc(root)}.</p></div></div>
+      <form class="panel row" id="newk"><input type="text" name="name" placeholder="Ny kund, t.ex. Borås Stad" style="flex:1;min-width:220px" required><button class="primary">+ Skapa kundprofil</button></form>
+      <div id="newklog"></div>
+      <div class="grid">${profiles.map((p) => `
+        <a class="panel card" href="#/kund/${encodeURIComponent(p.id)}">
+          <div class="thumb" style="background:linear-gradient(135deg,${esc(p.palette.band || "#0b3d5c")},${esc(p.palette.accent || "#1e9bd7")})">${esc(p.name)}</div>
+          <div class="body"><div class="spread"><span>${swatch(p.palette)}</span>
+            <span class="badge ${p.placeholder ? "run" : p.own ? "done" : ""}">${p.placeholder ? "platshållare" : p.template ? "mall" : p.own ? "egen" : "inbyggd"}</span></div>
+            <div class="small muted" style="margin-top:6px">${esc(p.id)} · ${esc(p.language || "")}${p.running ? ` · ${esc(p.running.title)} …` : ""}</div></div>
+        </a>`).join("")}</div>
+    </div>`;
+  $("#newk").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const { id, job } = await api("profiles", { body: { name: e.target.name.value } });
+      watchJob(job.id, $("#newklog"), (st) => (st === "done" ? (location.hash = `#/kund/${encodeURIComponent(id)}`) : toast("Det gick inte, se loggen")));
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+}
+
+const fileToBase64 = (file) =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).split(",")[1] || "");
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+
+async function customerPage(id) {
+  const k = await api(`profiles/${encodeURIComponent(id)}`);
+  const P = k.profile;
+  const pal = P.palette || {};
+  const F = P.fonts || {};
+  const busy = Boolean(k.running);
+  const dis = busy ? "disabled" : "";
+  const sel = (name, value, opts) => `<select name="${name}">${opts.map(([v, l]) => `<option value="${v}" ${String(value) === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  const hex = (c) => (/^#[0-9a-f]{6}$/i.test(c || "") ? c : "#000000");
+  const fontFiles = (role) => (F[role]?.files || []).map((f) => f.file);
+  const logoUrl = P.logo?.file ? pfileUrl(id, P.logo.file, Date.now()) : null;
+
+  app.innerHTML = `
+    <div class="stack">
+      <div class="spread">
+        <div><h1>${esc(P.name || id)}</h1><div class="muted">${swatch({ band: pal.band, primary: pal.primary, accent: pal.accent, surface: pal.surfaceLight, backdrop: pal.backdrop })} ${esc(id)} · ${k.own ? "egen profil" : "inbyggd – sparas som egen kopia när du ändrar"}</div></div>
+        <div class="row"><a class="btn" href="#/kunder">← Kunder</a><a class="btn" href="#/new">+ Ny film</a></div>
+      </div>
+      ${/PLACEHOLDER/i.test(P._doc || "") ? `<div class="panel banner small"><b>Platshållare.</b> Färger, typsnitt och logga är inte kundens egna än. Ladda upp kundens material nedan och låt Claude bygga profilen, eller fyll i själv.</div>` : ""}
+      <div class="cols">
+        <form class="panel" id="kf">
+          <div class="section">
+            <h2>1 · Kundens material</h2>
+            <p class="small muted">Grafisk manual (PDF), loggor, typsnitt, exempelbilder, presentationer – det Claude ska bygga profilen av. Sparas bara på den här datorn.</p>
+            <div class="drop" id="drop">Släpp filer här eller <label class="link" style="display:inline;margin:0;font-weight:600;cursor:pointer">välj filer<input type="file" id="mat" multiple hidden></label></div>
+            ${k.material.length ? `<table style="margin-top:8px">${k.material.map((m) => `<tr><td>${/\.(png|jpe?g|svg|gif|webp)$/i.test(m.name) ? `<img src="${pfileUrl(id, m.path)}" style="height:28px;vertical-align:middle;margin-right:8px;border-radius:4px">` : "📄 "}${esc(m.name)}</td><td class="muted small">${m.size < 1e6 ? `${Math.max(1, Math.round(m.size / 1e3))} kB` : `${(m.size / 1e6).toFixed(1)} MB`}</td><td><button type="button" class="link danger small" data-rm="${esc(m.path)}">ta bort</button></td></tr>`).join("")}</table>` : ""}
+            <label>Länkar <span class="hint">– kundens webbplats, grafisk profil online, exempel (en per rad)</span></label>
+            <textarea name="links" rows="2" placeholder="https://www.exempel.se">${esc(k.links)}</textarea>
+          </div>
+
+          <div class="section">
+            <h2>2 · Logga och typsnitt</h2>
+            <div class="row">
+              <div class="logo-prev" style="background:${esc(pal.band || "#0b3d5c")}">${logoUrl ? `<img src="${logoUrl}" alt="">` : `<span class="small" style="color:${esc(pal.bandText || "#fff")}">ingen logga</span>`}</div>
+              <label class="btn" style="margin:0">Byt logga (SVG/PNG)<input type="file" id="logo" accept=".svg,.png" hidden></label>
+              <span class="small muted">Loggan står på bandfärgen – välj varianten för den bakgrunden.</span>
+            </div>
+            <div class="two">
+              <div><label>Rubriktypsnitt</label><input type="text" name="f_display" value="${esc(F.display?.family || "")}"></div>
+              <div><label>Brödtext</label><input type="text" name="f_ui" value="${esc(F.ui?.family || "")}"></div>
+              <div><label>Rubrikvikt</label>${sel("f_weight", (F.display?.weights || [F.display?.weight || 700])[0], [["400", "400 normal"], ["500", "500"], ["600", "600"], ["700", "700 fet"], ["800", "800"], ["900", "900 svart"]])}</div>
+              <div><label>Källa</label>${sel("f_source", F.display?.google === false || F.display?.files ? "files" : "google", [["google", "Google Fonts (hämtas automatiskt)"], ["files", "Egna typsnittsfiler"]])}</div>
+            </div>
+            <label class="row" style="font-weight:400"><input type="checkbox" name="f_upper" ${F.display?.uppercase ? "checked" : ""}> Rubriker i versaler</label>
+            <div class="row" style="margin-top:6px"><label class="btn" style="margin:0">Ladda upp typsnittsfiler<input type="file" id="fontf" accept=".woff2,.woff,.ttf,.otf" multiple hidden></label>
+              <span class="small muted">${k.fonts.length ? k.fonts.map((f) => esc(f.name)).join(", ") : "inga egna filer"}${fontFiles("display").length ? " · kopplade av Claude/profilen" : ""}</span></div>
+          </div>
+
+          <div class="section">
+            <h2>3 · Färger</h2>
+            <div class="colors">${ROLES.map(([r, label]) => `<label class="color"><input type="color" name="c_${r}" value="${hex(pal[r])}"><span><b>${esc(label)}</b><code>${esc(pal[r] || "")}</code></span></label>`).join("")}</div>
+          </div>
+
+          <div class="section">
+            <h2>4 · Form och rörelse</h2>
+            <div class="two">
+              <div><label>Rörelse</label>${sel("motion", P.motion || "slide", [["slide", "Lugn glidning (de flesta kunder)"], ["deal", "Kort som delas ut (journalfilm)"]])}</div>
+              <div><label>Bakgrund</label>${sel("backdrop", P.backdrop || "plain", [["plain", "Enkel gradient"], ["starbursts", "Stjärnor (journalfilm)"]])}</div>
+              <div><label>Utan bild</label>${sel("ground", P.ground || "soft", [["soft", "Mjuka cirklar i profilens färger"], ["starburst", "Solfjäder (journalfilm)"]])}</div>
+              <div><label>Kortets hörn</label>${sel("radius", String(P.card?.radius ?? 14), [["0", "Raka"], ["8", "Lätt rundade"], ["14", "Rundade"], ["26", "Mycket rundade"]])}</div>
+              <div><label>Kantlinje</label>${sel("border", String(P.card?.border ?? 0), [["0", "Ingen"], ["2", "Tunn"], ["5", "Tjock (journalfilm)"]])}</div>
+              <div><label>Filmkorn</label>${sel("filmLook", String(Boolean(P.filmLook)), [["false", "Av"], ["true", "På (gammal film)"]])}</div>
+              <div><label>Kicker <span class="hint">– liten text i titelbandet</span></label><input type="text" name="kicker" value="${esc(P.kicker || "")}"></div>
+              <div><label>Namn</label><input type="text" name="name" value="${esc(P.name || "")}"></div>
+              <div><label>Slutkortets rad</label><input type="text" name="end_line" value="${esc(P.endCard?.line || "")}"></div>
+              <div><label>Slutkortets adress</label><input type="text" name="end_url" value="${esc(P.endCard?.url || "")}"></div>
+              <div><label>Språk</label>${sel("lang", P.language === "en" ? "en" : "sv", [["sv", "Svenska (sv-SE)"], ["en", "Engelska (en-GB)"]])}</div>
+              <div><label>Standardformat</label><div class="row">${["16:9", "1:1", "9:16"].map((f) => `<label class="row" style="margin:0;font-weight:400"><input type="checkbox" name="fmt" value="${f}" ${(P.formats || ["16:9", "1:1"]).includes(f) ? "checked" : ""}> ${f}</label>`).join("")}</div></div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>5 · Bildstil</h2>
+            <label>Så ska illustrationerna se ut <span class="hint">– på engelska, läggs till i varje bildprompt</span></label>
+            <textarea name="ink" rows="4">${esc(k.style.ink || "")}</textarea>
+            <label>Aldrig i bilderna</label>
+            <textarea name="never" rows="2">${esc(k.style.never || "")}</textarea>
+          </div>
+
+          <div class="section">
+            <h2>6 · Röst</h2>
+            <label>Beskrivning av berättaren <span class="hint">– på engelska</span></label>
+            <textarea name="v_description" rows="3">${esc(k.design.description || "")}</textarea>
+            <label>Provtext</label>
+            <textarea name="v_text" rows="2">${esc(k.design.text || "")}</textarea>
+            <div class="two"><div><label>Färdig röst: Voice ID <span class="hint">– kundens standardröst</span></label><input type="text" name="v_id" value="${esc(k.voice?.voice_id || "")}"></div>
+              <div><label>Röstens namn</label><input type="text" name="v_name" value="${esc(k.voice?.name || "")}"></div></div>
+          </div>
+
+          <div class="section">
+            <h2>7 · Tonalitet och regler</h2>
+            <p class="small muted">NOTES.md – Claude läser den före varje manus och bildprompt.</p>
+            <textarea name="notes" rows="12" class="mono">${esc(k.notes)}</textarea>
+          </div>
+          <div class="savebar"><button class="primary" ${dis}>Spara profilen</button><span class="small muted">Testbilderna visar hur det blir.</span></div>
+        </form>
+
+        <div class="stack">
+          <div class="panel">
+            <h2>✦ Claude</h2>
+            <p class="small muted">Claude läser materialet och fyller i färger, typsnitt, logga, bildstil, röst och tonalitet. Det som inte framgår skriver Claude som frågor till dig.</p>
+            <button class="primary" data-build ${dis}>✦ Bygg profilen från materialet</button>
+            <form id="kask" style="margin-top:12px"><textarea name="prompt" placeholder="T.ex. ”Använd den mörkgröna varianten av loggan” eller ”Gör bildstilen mer fotografisk”" ${dis}></textarea>
+              <div class="row" style="margin-top:8px"><button ${dis}>Skicka</button>${k.claudeSession ? `<button type="button" class="link small" data-kreset>Nytt samtal</button>` : ""}</div></form>
+            ${k.claudeLast?.result ? `<details open style="margin-top:12px"><summary>Claudes senaste svar <span class="muted small">${ago(k.claudeLast.at)}</span></summary><div class="answer">${md(k.claudeLast.result)}</div></details>` : ""}
+          </div>
+          <div class="panel">
+            <div class="spread"><h2>Testbilder</h2><button data-preview ${dis}>Rendera testbilder</button></div>
+            <p class="small muted">Demon om skottår i profilen, i ${(P.formats || ["16:9", "1:1"]).join(" och ")}. Första gången tar det någon minut.</p>
+            ${Object.entries(k.stills).map(([f, list]) => (list.length ? `<h3>${f}</h3><div class="sheets stack">${list.map((st) => `<img loading="lazy" src="${pfileUrl(id, "preview/" + st.path, st.mtime)}" alt="">`).join("")}</div>` : "")).join("")}
+          </div>
+          <div class="panel">
+            <div class="spread"><h2>Aktivitet</h2>${busy ? `<button class="danger" data-stop="${k.running.id}">Avbryt</button>` : ""}</div>
+            <div id="console" class="console">${busy ? "" : k.jobs.length ? "Välj ett jobb nedan för att se dess logg." : "Inget har körts ännu."}</div>
+            ${k.jobs.length ? `<div class="small" style="margin-top:8px">${k.jobs.slice(0, 6).map((j) => `<div class="spread"><button class="link" data-job="${j.id}">${esc(j.title)}</button><span class="${j.status === "done" ? "ok" : j.status === "running" ? "warn" : "bad"}">${{ done: "klart", running: "körs", failed: "misslyckades", stopped: "avbrutet" }[j.status]} · ${ago(j.started)}</span></div>`).join("")}</div>` : ""}
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  const reload = () => customerPage(id).catch((e) => toast(e.message));
+  const base = `profiles/${encodeURIComponent(id)}`;
+  const send = async (files, kind) => {
+    for (const file of files) {
+      if (file.size > 60e6) {
+        toast(`${file.name} är för stor (högst 60 MB)`);
+        continue;
+      }
+      toast(`Laddar upp ${file.name} …`);
+      try {
+        await api(`${base}/upload`, { body: { kind, name: file.name, data: await fileToBase64(file) } });
+      } catch (e) {
+        toast(e.message);
+      }
+    }
+    reload();
+  };
+  $("#mat").addEventListener("change", (e) => send([...e.target.files], "material"));
+  $("#logo").addEventListener("change", (e) => send([...e.target.files], "logo"));
+  $("#fontf").addEventListener("change", (e) => send([...e.target.files], "font"));
+  const drop = $("#drop");
+  drop.addEventListener("dragover", (e) => (e.preventDefault(), drop.classList.add("over")));
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("over");
+    send([...e.dataTransfer.files], "material");
+  });
+  app.querySelectorAll("[data-rm]").forEach((b) => b.addEventListener("click", async () => {
+    if (await ask({ title: "Ta bort filen?", text: b.dataset.rm, ok: "Ta bort" })) api(`${base}/remove`, { body: { path: b.dataset.rm } }).then(reload, (e) => toast(e.message));
+  }));
+
+  $("#kf").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    const fd = new FormData(f);
+    const v = (n) => String(fd.get(n) ?? "");
+    const palette = Object.fromEntries(ROLES.map(([r]) => [r, v(`c_${r}`)]));
+    const weight = Number(v("f_weight"));
+    const google = v("f_source") === "google";
+    const fonts = {
+      display: { family: v("f_display"), uppercase: fd.has("f_upper"), ...(google ? { google: true, weights: [weight] } : { google: false, weight }) },
+      ui: { family: v("f_ui"), ...(google ? { google: true, weights: [400, 600, 700] } : { google: false }) },
+    };
+    // script falls back to display when not set; keep a client's display font for slogans too
+    if (!F.script || F.script.family === F.display?.family) fonts.script = { ...fonts.display };
+    const sv = v("lang") === "sv";
+    const body = {
+      profile: {
+        name: v("name"), kicker: v("kicker"), language: sv ? "sv" : "en", locale: sv ? "sv-SE" : "en-GB",
+        formats: fd.getAll("fmt"), motion: v("motion"), backdrop: v("backdrop"), ground: v("ground"), filmLook: v("filmLook") === "true",
+        palette, fonts, card: { radius: Number(v("radius")), border: Number(v("border")) }, endCard: { line: v("end_line"), url: v("end_url") },
+      },
+      style: { ink: v("ink"), never: v("never") },
+      design: { description: v("v_description"), text: v("v_text") },
+      voice: v("v_id").trim() ? { voice_id: v("v_id").trim(), name: v("v_name") || "Berättare" } : null,
+      notes: v("notes"),
+      links: v("links"),
+    };
+    if (!body.profile.formats.length) return toast("Välj minst ett standardformat");
+    try {
+      const r = await api(`${base}/save`, { body });
+      toast(r.job ? "Sparat – hämtar typsnitten" : "Sparat");
+      if (id !== "_mall" && !k.own) toast("Sparat som egen kopia i dina kundprofiler");
+      reload();
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+
+  const claude = async (b) => {
+    try {
+      await api(`${base}/claude`, { body: b });
+      reload();
+    } catch (e) {
+      toast(e.message);
+    }
+  };
+  app.querySelector("[data-build]")?.addEventListener("click", () => {
+    if (!k.material.length && !k.links.trim()) return toast("Ladda upp kundens material eller skriv en länk först");
+    claude({ preset: "build" });
+  });
+  $("#kask").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const prompt = e.target.prompt.value.trim();
+    if (prompt) claude({ prompt });
+  });
+  app.querySelector("[data-kreset]")?.addEventListener("click", () => api(`${base}/claude-reset`, { body: {} }).then(reload));
+  app.querySelector("[data-preview]")?.addEventListener("click", () => api(`${base}/preview`, { body: {} }).then(reload, (e) => toast(e.message)));
+  app.querySelector("[data-stop]")?.addEventListener("click", (e) => api(`jobs/${e.target.dataset.stop}/stop`, { body: {} }).then(reload));
+  app.querySelectorAll("[data-job]").forEach((b) => b.addEventListener("click", () => watchJob(b.dataset.job, $("#console"))));
+  if (busy) watchJob(k.running.id, $("#console"), () => reload());
 }
 
 // ── settings ──
