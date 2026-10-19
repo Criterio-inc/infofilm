@@ -28,9 +28,10 @@ for (const id of ids) {
     await renderStill({ serveUrl, composition, frame: f, output, overwrite: true, logLevel: "error", ...browser });
     files.push(output);
   }
+  // cells keep the composition's shape: 640×360 at 16:9, 420×420 at 1:1, 300×534 at 9:16
   const cols = 3;
-  const cellW = 640;
-  const cellH = 360;
+  const cellW = composition.width > composition.height * 1.2 ? 640 : composition.width >= composition.height ? 420 : 300;
+  const cellH = Math.round((cellW * composition.height) / composition.width / 2) * 2;
   const scaled = files.map((_, i) => `[${i}]scale=${cellW}:${cellH},drawtext=text='${frames[i]}':x=8:y=8:fontsize=22:fontcolor=yellow:box=1:boxcolor=black@0.6[s${i}]`);
   const padN = files.length % cols ? cols - (files.length % cols) : 0;
   const pads = Array.from({ length: padN }, (_, k) => `color=black:s=${cellW}x${cellH}:d=1[p${k}]`);

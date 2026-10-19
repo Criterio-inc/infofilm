@@ -1,0 +1,212 @@
+// What the buttons do: each action is a job of one or more steps in the project folder.
+// Paid steps (voice, images) only run after the page has shown the dry-run and the user approved;
+// the approval and the estimate go into notes/log.md, as the skill requires.
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import net from "node:net";
+import path from "node:path";
+import { SKILL_DIR, toolEnv } from "./config.mjs";
+import { startJob } from "./jobs.mjs";
+import { logLine, profileDir, projectDir, saveApp, writeBrief } from "./projects.mjs";
+import { claudeStep } from "./claude.mjs";
+import { loadConfig } from "./config.mjs";
+
+const py = (dir, label, ...args) => ({ label, cmd: "python3", args, cwd: dir });
+const build = (dir, format) => ({ ...py(dir, format ? `Tidslinje (${format})` : "Tidslinje", "tools/build_timeline.py"), env: format ? { FORMAT: format } : {} });
+
+function comps(dir) {
+  const tl = JSON.parse(readFileSync(path.join(dir, "video/src/timeline/master.json"), "utf8"));
+  return tl.scenes.map((s) => `${s.id}-${s.name}`);
+}
+
+export function runAction(id, action, args = {}) {
+  const dir = projectDir(id);
+  const film = JSON.parse(readFileSync(path.join(dir, "film.json"), "utf8"));
+  const main = (film.formats || ["16:9"])[0];
+  const est = args.estimate ? ` (uppskattat: ${String(args.estimate).slice(0, 200)})` : "";
+
+  switch (action) {
+    case "build":
+      return startJob(id, "Bygg tidslinjen", [build(dir)]);
+
+    case "stills": {
+      const fmt = args.format || main;
+      if (!(film.formats || ["16:9"]).includes(fmt)) throw Object.assign(new Error(`formatet ${fmt} finns inte i filmen`), { status: 400 });
+      const steps = [build(dir, fmt), {
+        label: `Stillbilder ${fmt}`,
+        cmd: "node",
+        args: ["tools/review.mjs", String(args.frames || 6), ...comps(dir)],
+        cwd: path.join(dir, "video"),
+        env: { STILLS_DIR: path.join(dir, "out", `stills-${fmt.replace(":", "x")}`) },
+        parse: (l) => (/Detected differing memory|Memory reported|docker run|lower amount/.test(l) ? null : l.replace(dir + "/", "")),
+      }];
+      if (fmt !== main) steps.push(build(dir));
+      return startJob(id, `Stillbilder ${fmt}`, steps);
+    }
+
+    case "render": {
+      const fmts = args.format ? [args.format] : [];
+      return startJob(id, args.format ? `Rendera ${args.format}` : "Rendera alla format", [
+        { label: "render.sh", cmd: "bash", args: ["tools/render.sh", ...fmts], cwd: dir, parse: (l) => (/Detected differing memory|Memory reported|docker run|lower amount/.test(l) ? null : l) },
+      ], { onDone: (j) => j.status === "done" && logLine(id, `renderad i appen: ${fmts.join(", ") || (film.formats || ["16:9"]).join(", ")}`) });
+    }
+
+    case "narrate-dry":
+      return startJob(id, "Röst: vad kostar det?", [py(dir, "narrate.py --dry-run", "voice/narrate.py", "--dry-run")]);
+
+    case "narrate":
+      logLine(id, `godkänt i appen: berättarröst${est}`);
+      return startJob(id, "Röst: läs in", [py(dir, "narrate.py", "voice/narrate.py"), build(dir)], {
+        onDone: (j) => {
+          const used = j.lines.map((l) => l.line).find((l) => /^credits used/.test(l));
+          logLine(id, `röst ${j.status === "done" ? "klar" : "avbruten"}${used ? ": " + used : ""}`);
+        },
+      });
+
+    case "images-dry":
+      return startJob(id, "Bilder: vad kostar det?", [py(dir, "gen.py --dry-run", "art/gen.py", "--dry-run")]);
+
+    case "images":
+      logLine(id, `godkänt i appen: illustrationer${est}`);
+      return startJob(id, "Bilder: generera", [py(dir, "gen.py", "art/gen.py", ...(args.ids || [])), py(dir, "Till videon", "tools/sync_art.py"), build(dir)], {
+        onDone: (j) => {
+          const done = j.lines.map((l) => l.line).find((l) => /^done, \$/.test(l));
+          logLine(id, `bilder ${j.status === "done" ? "klara" : "avbrutna"}${done ? ": " + done.split(" — ")[0] : ""}`);
+        },
+      });
+
+    case "voice-preview": {
+      const tag = `v${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`;
+      logLine(id, `godkänt i appen: röstdesign, 3 provtagningar (${tag})`);
+      return startJob(id, "Röst: tre provtagningar", [py(dir, "design_voice.py preview", "voice/design_voice.py", "preview", tag)]);
+    }
+
+    case "voice-create": {
+      if (!/^[A-Za-z0-9_-]+$/.test(args.gid || "")) throw Object.assign(new Error("ogiltig röst"), { status: 400 });
+      const name = String(args.name || film.title || "narrator").slice(0, 60);
+      return startJob(id, "Röst: spara vald röst", [py(dir, "design_voice.py create", "voice/design_voice.py", "create", args.gid, name)], {
+        onDone: (j) => j.status === "done" && logLine(id, `röst vald i appen: ${name} (${args.gid})`),
+      });
+    }
+
+    case "claude":
+      return startJob(id, args.title || "Claude", [claudeStep(id, dir, args.prompt)], {
+        onDone: (j) => saveApp(id, { claudeSession: j.data.session || null, claudeLast: { at: Date.now(), status: j.status, cost: j.data.cost ?? null, result: j.data.result ?? null } }),
+      });
+
+    default:
+      throw Object.assign(new Error(`okänd åtgärd ${action}`), { status: 400 });
+  }
+}
+
+/** A new project: new_film.sh with the profile, the brief, then Claude when asked. */
+export function createProject(b) {
+  const root = loadConfig().filmsPath;
+  const slug = String(b.slug || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!slug) throw Object.assign(new Error("ange en titel"), { status: 400 });
+  const dir = path.join(root, slug);
+  if (existsSync(dir)) throw Object.assign(new Error(`det finns redan ett projekt som heter ${slug}`), { status: 409 });
+  const formats = (b.formats || []).filter((f) => ["16:9", "1:1", "9:16"].includes(f));
+  const args = [path.join(SKILL_DIR, "scripts/new_film.sh"), dir, "--profile", profileDir(b.profile || "criterio"), "--mode", b.mode === "film" ? "film" : "klipp", "--slug", slug, "--title", String(b.title || slug)];
+  if (formats.length) args.push("--format", formats.join(","));
+  const steps = [
+    { label: "Nytt projekt från mallen", cmd: "bash", args, cwd: SKILL_DIR, parse: (l) => (/npm notice/.test(l) ? null : l) },
+    {
+      label: "Brief",
+      cmd: "true",
+      args: [],
+      cwd: SKILL_DIR,
+      after: () => {
+        writeBrief(dir, b);
+        logLine(slug, `projektet skapat i appen (profil ${b.profile || "criterio"}, ${b.mode === "film" ? "film" : "klipp"}, ${formats.join(", ") || "profilens format"})`);
+      },
+    },
+  ];
+  const job = startJob(slug, "Skapa projekt", steps, {
+    onDone: (j) => {
+      if (j.status === "done" && b.startClaude) {
+        try {
+          runAction(slug, "claude", { title: "Research och manus", prompt: PRESETS.script.prompt });
+        } catch {
+          /* the page shows the project; the user can start Claude there */
+        }
+      }
+    },
+  });
+  return { job, id: slug };
+}
+
+/** Ready-made instructions for Claude, matching the skill's phases. */
+export const PRESETS = {
+  script: {
+    label: "Research och manus",
+    prompt:
+      "Läs brand/NOTES.md och notes/brief.md. Gör fas 1 (research → notes/research.md, med primärkällor) och fas 3 (manus → script/script.md) enligt skillen, i projektets läge och längd. Ersätt demon helt, även data.ts där det behövs. Låt en oberoende subagent granska manus och research mot primärkällorna och åtgärda allt som är MUST. Kör sedan python3 tools/build_timeline.py. Avsluta med en kort sammanfattning av manuset och det jag behöver godkänna.",
+  },
+  shots: {
+    label: "Bildprompter",
+    prompt:
+      "Skriv art/shots.json för filmens scener: en film-Sxx per scen (inte end-card), från scenens > visual:-rad, i profilens bildstil (art/style.json). Ta bort demons bilder ur shots.json. Behöver profilen en återkommande figur som saknas, föreslå det i stället för att lägga till den. Kör inte gen.py, det gör jag i appen.",
+  },
+  scenes: {
+    label: "Bygg scenerna",
+    prompt:
+      "Gör fas 7: ta bort demoscenerna (TheYear, TheRule) och bygg filmens scener, de bärande först. Lägg siffror i data.ts med källa. Lägg ut scenerna efter WIN och WIDE så att de fungerar i alla format i film.json, och kontrollera stillbilder i varje format. Kör lint_cues och tsc. Avsluta med en rad per scen om vad som syns.",
+  },
+  review: {
+    label: "Granska scenerna",
+    prompt:
+      "Granska varje scen med node tools/review.mjs 6 <alla scener> (från video/) i huvudformatet och, om filmen har fler format, i dem också. Rätta det som är klippt, överlappar, landar fel eller är svårläst. Avsluta med vad du ändrade.",
+  },
+};
+
+// ── Remotion Studio, one per project while it is open ──
+const studios = new Map();
+
+const freePort = (start) =>
+  new Promise((resolve) => {
+    const s = net.createServer();
+    s.once("error", () => resolve(freePort(start + 1)));
+    s.once("listening", () => s.close(() => resolve(start)));
+    s.listen(start, "127.0.0.1");
+  });
+
+export async function startStudio(id) {
+  const dir = projectDir(id);
+  if (studios.has(id)) return { port: studios.get(id).port };
+  const port = await freePort(3100 + studios.size);
+  const child = spawn("npx", ["remotion", "studio", "src/index.ts", "--port", String(port), "--no-open"], { cwd: path.join(dir, "video"), env: toolEnv(), stdio: "ignore" });
+  studios.set(id, { child, port });
+  child.on("close", () => studios.delete(id));
+  // wait until it answers, at most 60 s
+  for (let i = 0; i < 120; i++) {
+    const ok = await new Promise((r) => {
+      const s = net.connect(port, "127.0.0.1", () => (s.destroy(), r(true)));
+      s.on("error", () => r(false));
+    });
+    if (ok) return { port };
+    if (!studios.has(id)) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error("Remotion Studio startade inte");
+}
+
+export function stopStudio(id) {
+  studios.get(id)?.child.kill("SIGTERM");
+  studios.delete(id);
+}
+
+export const studioPort = (id) => studios.get(id)?.port ?? null;
+export const stopStudios = () => [...studios.keys()].forEach(stopStudio);
+
+/** Open a folder in Finder (macOS) or the file manager. */
+export function reveal(id, sub = "") {
+  const dir = path.join(projectDir(id), sub);
+  const cmd = process.platform === "darwin" ? "open" : "xdg-open";
+  spawn(cmd, [existsSync(dir) ? dir : projectDir(id)], { stdio: "ignore", detached: true }).unref();
+}

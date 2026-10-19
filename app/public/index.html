@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Infofilm</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#/"><img src="icon.svg" alt=""> Infofilm</a>
+    <nav>
+      <a href="#/" data-nav="projects">Filmer</a>
+      <a href="#/new" data-nav="new" class="primary-link">+ Ny film</a>
+      <a href="#/settings" data-nav="settings">Inställningar</a>
+    </nav>
+  </header>
+  <main id="app"><p class="muted pad">Laddar …</p></main>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

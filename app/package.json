@@ -1,0 +1,12 @@
+{
+  "name": "infofilm-app",
+  "private": true,
+  "type": "module",
+  "description": "A small local app around the infofilm skill: projects, new film, cost gates, preview, render, and Claude.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
