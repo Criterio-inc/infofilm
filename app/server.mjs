@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { approve, createProject, PRESETS, reveal, revealFile, runAction, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
+import { approve, createProject, PRESETS, reveal, revealFile, runAction, uploadAudio, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
 import { APP_DIR, KEYS, SKILL_DIR, checkKey, loadConfig, loadSecrets, saveConfig, saveSecrets, toolEnv } from "./lib/config.mjs";
 import { getJob, projectJobs, runningJob, stopAll, stopJob, summary as jobSummary } from "./lib/jobs.mjs";
 import { detail, listProfiles, listProjects, projectDir, saveApp } from "./lib/projects.mjs";
@@ -205,6 +205,9 @@ async function api(req, res, url) {
     if (m === "POST" && parts[2] === "claude-reset") {
       saveApp(id, { claudeSession: null, claudeLast: null });
       return json(res, 200, { ok: true });
+    }
+    if (m === "POST" && parts[2] === "upload-audio") {
+      return json(res, 202, { job: jobSummary(uploadAudio(id, await body(req, 8e7))) });
     }
     if (m === "POST" && parts[2] === "approve") {
       approve(id, (await body(req)).step);

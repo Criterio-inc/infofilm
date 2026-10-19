@@ -125,6 +125,27 @@ function steps(s) {
   return { list, current };
 }
 
+/** Claude has built the film's scenes when every scene (but the end card) has a component in the
+ * registries and the demo's scenes are no longer in them; the demo's files may stay on disk. */
+function scenesBuilt(dir, scenes) {
+  const reg = ["golden.ts", "registry.ts"].map((f) => read(path.join(dir, "video/src/scenes", f), "")).join("\n");
+  const names = scenes.map((s) => s.name).filter((n) => n && n !== "end-card");
+  return names.length > 0 && !/\b(TheYear|TheRule)\b/.test(reg) && names.every((n) => reg.includes(`"${n}"`) || new RegExp(`\\b${n.replace(/-/g, "_")}\\b`).test(reg));
+}
+
+/** The newest change to what the film is made of: script, film.json, profile, pictures, narration,
+ * music and the scenes' code. Generated files (the timeline, renders, stills) do not count. */
+function changedAt(dir) {
+  const skip = new Set(["node_modules", "timeline", "previews"]);
+  const newest = (p) => {
+    if (!existsSync(p)) return 0;
+    const st = statSync(p);
+    if (!st.isDirectory()) return st.mtimeMs;
+    return Math.max(0, ...readdirSync(p).filter((n) => !n.startsWith(".") && !skip.has(n)).map((n) => newest(path.join(p, n))));
+  };
+  return Math.max(...["script", "film.json", "brand", "art/img", "art/shots.json", "voice/scenes", "voice/voice.json", "music/cuts.json", "music/suno", "video/src"].map((r) => newest(path.join(dir, r))));
+}
+
 const mtime = (f) => (existsSync(f) ? statSync(f).mtimeMs : 0);
 
 export function summary(id) {
@@ -160,9 +181,9 @@ export function summary(id) {
     subtitles: files(outDir, /\.srt$/).filter((f) => f.size > 0),
     approved: app.approved || {},
     scriptMtime: mtime(path.join(dir, film.script || "script/script.md")),
-    timelineMtime: mtime(path.join(dir, "video/src/timeline/master.json")),
-    // the demo's golden scenes go when Claude builds the film's own
-    scenesBuilt: !existsSync(path.join(dir, "video/src/scenes/TheYear.tsx")),
+    // when the film last really changed: the timeline file itself is rebuilt by every render and preview
+    timelineMtime: changedAt(dir),
+    scenesBuilt: scenesBuilt(dir, scenes),
     preview: existsSync(preview) ? { path: path.relative(dir, preview), mtime: mtime(preview) } : null,
     modified: Math.max(statSync(path.join(dir, "film.json")).mtimeMs, ...renders.map((r) => r.mtime), existsSync(path.join(dir, "video/src/timeline/master.json")) ? statSync(path.join(dir, "video/src/timeline/master.json")).mtimeMs : 0),
   };

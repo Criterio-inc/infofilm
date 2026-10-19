@@ -246,6 +246,24 @@ export function stopStudio(id) {
 export const studioPort = (id) => studios.get(id)?.port ?? null;
 export const stopStudios = () => [...studios.keys()].forEach(stopStudio);
 
+/** The user's own sound for one film (a loop, a piece of music): saved in music/suno/ and offered as a
+ * background choice. It is chosen right away, since that is why it was added. */
+export function uploadAudio(id, { name, data }) {
+  const dir = projectDir(id);
+  const safe = String(name || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[-.]+/, "");
+  if (!/\.(wav|mp3|m4a|aiff?|flac)$/i.test(safe)) throw Object.assign(new Error("ljudet ska vara WAV, MP3, M4A, AIFF eller FLAC"), { status: 400 });
+  mkdirSync(path.join(dir, "music/suno"), { recursive: true });
+  writeFileSync(path.join(dir, "music/suno", safe), Buffer.from(String(data || ""), "base64"));
+  const cf = path.join(dir, "music/cuts.json");
+  const cuts = existsSync(cf) ? JSON.parse(readFileSync(cf, "utf8")) : {};
+  const stem = path.parse(safe).name;
+  const key = "bed-eget-" + stem.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  cuts[key] = { file: `suno/${safe}`, label: `${String(path.parse(String(name)).name).slice(0, 40)} (eget)` };
+  writeFileSync(cf, JSON.stringify(cuts, null, 2) + "\n");
+  logLine(id, `eget ljud uppladdat i appen: ${name}`);
+  return runAction(id, "music", { key });
+}
+
 /** The user approves a step (the script, the preview); it counts until what it approved changes. */
 export function approve(id, step) {
   if (!["script", "review"].includes(step)) throw Object.assign(new Error("okänt steg"), { status: 400 });

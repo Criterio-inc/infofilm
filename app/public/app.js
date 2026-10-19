@@ -363,26 +363,30 @@ async function projectPage(id) {
       card.main = goNext;
     }
     const ms = p.music || { loops: [], bed: "" }; // an older server sends no music
-    card.more = `<div class="row"><label style="margin:0">Bakgrundsmusik</label><select id="bedsel" style="width:auto" ${busy ? "disabled" : ""}>${[["", "Ingen"], ...ms.loops.map((m) => [m.key, `Slingan ${m.label}`])].map(([v, l]) => `<option value="${esc(v)}" ${v === ms.bed ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
+    card.more = `<div class="row"><label style="margin:0">Bakgrundsmusik</label><select id="bedsel" style="width:auto" ${busy ? "disabled" : ""}>${[["", "Ingen"], ...ms.loops.map((m) => [m.key, /^bed-eget-/.test(m.key) ? m.label : `Slingan ${m.label}`])].map(([v, l]) => `<option value="${esc(v)}" ${v === ms.bed ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
       ${ms.loops.find((m) => m.key === ms.bed && m.src) ? `<audio controls preload="none" src="${fileUrl(id, ms.loops.find((m) => m.key === ms.bed && m.src).src)}" style="flex:1;min-width:200px"></audio>` : ""}
-      ${ms.loops.length ? "" : `<span class="small muted">Kunden har inga slingor än. Lägg till under Kunder → ${esc(p.profileName)} → Musik.</span>`}</div>`;
+      <label class="btn" style="margin:0">Ladda upp eget ljud<input type="file" id="ownaudio" accept=".wav,.mp3,.m4a,.aif,.aiff,.flac" hidden ${busy ? "disabled" : ""}></label></div>
+      <p class="small muted" style="margin:6px 0 0">${ms.loops.length ? "Ett eget ljud gäller bara den här filmen. Musiken ligger lågt under rösten och lite högre i pauserna." : `Kunden har inga slingor än: ladda upp ett eget ljud här, eller lägg till slingor under Kunder → ${esc(p.profileName)} → Musik.`}</p>`;
     if (p.preview) card.body = `<video id="previewvid" controls preload="metadata" src="${fileUrl(id, p.preview.path, p.preview.mtime)}"></video>`;
   }
 
   if (view === "deliver") {
-    card.title = p.renders.length ? "Färdiga filer" : "Gör de färdiga filmerna";
-    card.text = `${p.formats.join(" och ")}, med jämn ljudnivå och undertexter. ${p.renders.length ? "Gör om filmerna när du har ändrat något." : ""}`;
+    // only films made after the last change count; older ones stay, marked, below
+    const fresh = p.renders.filter((r) => r.mtime >= p.timelineMtime);
+    const stale = p.renders.filter((r) => r.mtime < p.timelineMtime);
+    const subs = p.subtitles.filter((r) => r.mtime >= p.timelineMtime);
+    const fileRow = (r, what = "") => `<div class="spread small"><span><b>${esc(r.name)}</b> <span class="muted">${what || `${(r.size / 1e6).toFixed(1).replace(".", ",")} MB`} · ${ago(r.mtime)}</span></span><button class="link" data-file="out/${esc(r.name)}">Visa i Finder</button></div>`;
+    card.title = fresh.length ? "Färdiga filer" : "Gör de färdiga filmerna";
+    card.text = `${p.formats.join(" och ")}, med röst, bilder, musik, jämn ljudnivå och undertexter.${fresh.length ? " Har du ändrat något gör du om filmerna." : ""}`;
     card.facts = [`Tar några minuter${p.formats.length > 1 ? " per format" : ""}`, "Kostar inget"];
-    card.main = run('data-act="render"', p.renders.length ? "Gör filmerna igen" : "Gör de färdiga filmerna", !p.renders.length);
-    card.body = p.renders.length || p.subtitles.length
-      ? `<div class="stack">${p.renders.map((r) => `<div class="file"><video controls preload="metadata" src="${fileUrl(id, "out/" + r.name, r.mtime)}"></video><div class="spread small"><span><b>${esc(r.name)}</b> <span class="muted">${(r.size / 1e6).toFixed(1).replace(".", ",")} MB · ${ago(r.mtime)}</span></span><button class="link" data-file="out/${esc(r.name)}">Visa i Finder</button></div></div>`).join("")}
-         ${p.subtitles.map((r) => `<div class="spread small"><span><b>${esc(r.name)}</b> <span class="muted">undertexter</span></span><button class="link" data-file="out/${esc(r.name)}">Visa i Finder</button></div>`).join("")}</div>`
+    card.main = run('data-act="render"', fresh.length ? "Gör filmerna igen" : "Gör de färdiga filmerna", !fresh.length);
+    card.body = fresh.length
+      ? `<div class="stack">${fresh.map((r) => `<div class="file"><video controls preload="metadata" src="${fileUrl(id, "out/" + r.name, r.mtime)}"></video>${fileRow(r)}</div>`).join("")}${subs.map((r) => fileRow(r, "undertexter")).join("")}</div>`
       : "";
-    card.more = p.renders.length ? `<button class="link small" data-reveal="out">Öppna mappen med de färdiga filerna</button>` : "";
+    card.more = `${fresh.length ? `<button class="link small" data-reveal="out">Öppna mappen med de färdiga filerna</button>` : ""}
+      ${stale.length ? `<details style="margin-top:8px"><summary class="small muted">Äldre filer, gjorda före dina senaste ändringar (${stale.length})</summary><div class="stack" style="margin-top:6px">${stale.map((r) => fileRow(r)).join("")}</div></details>` : ""}`;
   }
 
-  // out of order is allowed, but then the main button is not the one to press
-  if (before.length) card.main = card.main.replace('class="primary"', "");
   const status = busy
     ? `<div class="working"><div class="row"><span class="spinner"></span><b>${esc(p.running.title)}</b><span class="muted small" id="lastline"></span></div><details style="margin-top:6px"><summary class="small">Visa vad som händer</summary><div id="console" class="console" style="margin-top:6px"></div></details></div>`
     : failed
@@ -444,6 +448,18 @@ async function projectPage(id) {
     window.scrollTo({ top: 0 });
   }));
   $("#bedsel")?.addEventListener("change", (e) => act("music", { key: e.target.value }));
+  $("#ownaudio")?.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 60e6) return toast("Filen är för stor (högst 60 MB)");
+    toast(`Laddar upp ${file.name} …`);
+    try {
+      await api(`projects/${enc}/upload-audio`, { body: { name: file.name, data: await fileToBase64(file) } });
+      reload();
+    } catch (err) {
+      toast(err.message);
+    }
+  });
   app.querySelector("[data-play]")?.addEventListener("click", async () => {
     viewStep[id] = "review";
     await reload();
