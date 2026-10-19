@@ -6,12 +6,12 @@ Infofilm-appen är ett litet lokalt skal runt infofilm-skillen. Den startas frå
 |---|---|
 | **Filmer** | Visar alla projekt med kund, typ, format, status och vad som är nästa steg. |
 | **Ny film** | En guide där du väljer kund (profil), klipp eller film och format, och skriver en brief. Claude kan sedan börja direkt med research och manus. |
-| **Projektsidan** | Har ett avsnitt per steg: manus, röst, bilder, scener och rendering. |
-| **Be Claude** | Fri instruktion till Claude i projektet, t.ex. "gör scen 2 luftigare". Samtalet fortsätter där det slutade. |
-| **Kostnadsgrindar** | Röst och bilder kostar pengar. Knappen **Vad kostar det?** visar vad som skulle debiteras, och först **Godkänn och kör** gör det på riktigt. Godkännandet skrivs in i `notes/log.md`. |
-| **Förhandsgranska** | Startar Remotion Studio för projektet. |
-| **Stillbilder** | Visar sex bilder per scen i varje format. |
-| **Rendera** | Renderar alla format med en knapp och spelar upp resultatet. **Öppna leveransmappen** visar filerna i Finder. |
+| **Filmsidan** | Leder dig genom fem steg, en sak i taget: **Manus**, **Röst**, **Bilder**, **Titta igenom** och **Leverera**. Stegraden överst visar vad som är klart. Kortet under visar nästa steg med en enda huvudknapp, vad det kostar och hur lång tid det tar. Du kan gå tillbaka till ett tidigare steg; ändrar du manuset eller filmen efter ett godkännande behöver du godkänna igen. |
+| **Vill du ändra något?** | Skriv med egna ord, eller tryck på ett förslag, så ändrar Claude. Samtalet fortsätter där det slutade. |
+| **Kostnader** | Röst och bilder kostar pengar. Kortet visar kostnaden och vad som finns kvar hos ElevenLabs och OpenRouter, och inget körs förrän du har godkänt i en ruta. Godkännandet skrivs in i `notes/log.md`. |
+| **Titta igenom** | **Gör en snabbversion** renderar hela filmen i halv upplösning på en till två minuter, och den spelas direkt på sidan. |
+| **Leverera** | Gör de färdiga filmerna i alla format. **Färdiga filer** visar bara filmerna och undertexterna, och **Visa i Finder** markerar just den filen. |
+| **Fel** | Ett steg som inte gick förklaras med en mening om vad som hände och vad du gör. **Låt Claude titta på felet** skickar loggen till Claude. Loggar, stillbilder, Remotion Studio och projektmappen ligger under **Tekniska detaljer**. |
 | **Kunder** | En sida per kundprofil. Där laddar du upp kundens material: grafisk manual, loggor, typsnitt, exempelbilder och länkar. **✦ Bygg profilen från materialet** låter Claude fylla i färger, typsnitt, logga, bildstil, röst och tonalitet, och det som saknas skrivs som frågor. Du kan också justera allt själv, bland annat med färgväljare per färgroll, och se resultatet med **Rendera testbilder** i 16:9 och 1:1. Under **Designsystem** länkar du kundens designsystem (Claude Design eller webben): Claude läser det när profilen byggs, synkar in dess färger och typsnitt med **✦ Synka designsystemet**, och läser det igen före varje manus, bildprompt och scen. En enskild film kan få egna länkar i guiden för ny film. Profilerna sparas i `~/Kundprofiler`, utanför repot. Inbyggda profiler, som `critero`, kopieras dit när du ändrar dem. |
 | **Röst** | Under steget Röst på filmsidan skriver du röstbeskrivning och provtext, eller klistrar in ett färdigt Voice ID från ElevenLabs. **Spara som standardröst** lägger rösten i kundprofilen, så att kundens kommande filmer får samma berättare. |
 | **Inställningar** | Visar vad som saknas på datorn, och här anger du mappar och API-nycklar. Nycklarna sparas bara lokalt, i `~/.infofilm/secrets.json`. |

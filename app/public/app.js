@@ -57,6 +57,7 @@ const md = (t) =>
     )
     .join("");
 const modeName = (m) => (m === "klipp" ? "Klipp" : "Film");
+const STEP_NAMES = { script: "Manus", voice: "Röst", images: "Bilder", review: "Titta igenom", deliver: "Leverera" };
 const ago = (t) => {
   const s = (Date.now() - t) / 1000;
   if (s < 90) return "nyss";
@@ -97,10 +98,7 @@ function checksBanner() {
 
 async function projectsPage() {
   const list = await api("projects");
-  const steps = (p) => {
-    const on = [p.brief && !p.demo, p.scenes && p.narrated >= p.scenes, p.illustrated && p.images >= p.illustrated, p.renders.length > 0];
-    return `<div class="steps" title="Manus · Röst · Bilder · Renderad">${on.map((x) => `<span class="${x ? "on" : ""}"></span>`).join("")}</div>`;
-  };
+  const steps = (p) => `<div class="steps" title="${p.steps.list.map((s) => s.label).join(" · ")}">${p.steps.list.map((s) => `<span class="${s.done ? "on" : ""}"></span>`).join("")}</div>`;
   app.innerHTML = `
     <div class="stack">
       <div class="spread"><div><h1>Filmer</h1><p class="muted">${esc(state.config.filmsPath)}</p></div><a class="btn" href="#/new" style="background:var(--primary);color:#fff;border-color:var(--primary)">+ Ny film</a></div>
@@ -203,197 +201,340 @@ function newPage() {
   });
 }
 
-// ── one film ──
+// ── one film: five guided steps, one thing at a time ──
+const viewStep = {}; // the step the user looks at, per film (else the next one to do)
+const STEP_INTRO = {
+  script: "Claude tar fram fakta ur källor och skriver manuset utifrån briefen. Du läser och godkänner.",
+  voice: "Berättaren läser manuset scen för scen. Du lyssnar innan du går vidare.",
+  images: "En illustration per scen i kundens bildstil. Siffror och rubriker ritas ovanpå i filmen, aldrig i bilden.",
+  review: "Claude bygger scenerna: rubriker, diagram och siffror som dyker upp när berättaren säger dem. Sedan tittar du på en snabbversion.",
+  deliver: "De färdiga filmerna i alla format, med jämn ljudnivå och undertexter.",
+};
+const CHIPS = {
+  script: ["Gör manuset kortare", "Enklare språk", "Starkare inledning"],
+  voice: ["Skriv siffror och förkortningar så att de läses rätt"],
+  images: ["Varmare ljus i bilderna", "Mer lugn yta för diagrammen"],
+  review: ["Större text", "Lugnare rörelser", "Granska alla scener och rätta det som ser fel ut"],
+  deliver: [],
+};
+// a failed step in one sentence: what happened and what to do
+const EXPLAIN = [
+  [/invalid_api_key|Invalid API key/i, "Tjänsten godtog inte API-nyckeln. Kontrollera nyckeln under Inställningar."],
+  [/output_format_not_allowed/, "ElevenLabs-kontot saknar ljudformatet som begärdes. Prova igen, appen väljer nu ett format som ditt konto har."],
+  [/quota_exceeded|insufficient|not enough credits|status_code: 402|\b402\b/i, "Krediterna räcker inte. Fyll på hos tjänsten och prova igen."],
+  [/ENOTFOUND|ECONNRESET|getaddrinfo|ConnectError|timed out|Network is unreachable/i, "Appen fick ingen kontakt med tjänsten. Kontrollera internetanslutningen och prova igen."],
+  [/No space left/i, "Disken är full. Frigör plats och prova igen."],
+  [/fix the cues first/, "Några scener pekar på ord som inte finns i manuset längre. Låt Claude rätta det."],
+  [/error TS\d+/, "Scenernas kod har ett fel. Låt Claude rätta det."],
+];
+const explain = (text) => EXPLAIN.find(([re]) => re.test(text))?.[1] || "Det gick inte. Låt Claude titta på felet, eller öppna de tekniska detaljerna.";
+
+async function jobText(jobId) {
+  const t = await (await fetch(`/api/jobs/${jobId}/stream`)).text();
+  return t.split("\n\n").filter((x) => x.startsWith("data: ")).flatMap((x) => {
+    const ev = JSON.parse(x.slice(6));
+    return ev.type === "hello" ? ev.lines.map((l) => l.line) : [];
+  }).join("\n");
+}
+
+const stepOf = (title) =>
+  /^Röst/.test(title) ? "voice" : /^Bilder|bildprompter/i.test(title) ? "images" : /Snabbförhandsvisning|Stillbilder|bygg scenerna|granska/i.test(title) ? "review"
+  : /^Rendera/.test(title) ? "deliver" : /research och manus/i.test(title) ? "script" : null;
+const kr = (n) => new Intl.NumberFormat("sv-SE").format(n);
+const list = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} och ${xs[xs.length - 1]}` : xs[0] || "");
+
 async function projectPage(id) {
   const p = await api(`projects/${encodeURIComponent(id)}`);
+  const enc = encodeURIComponent(id);
   const busy = Boolean(p.running);
-  const dis = busy ? "disabled" : "";
-  const main = p.formats[0];
-  const narratedAll = p.scenes.length && p.scenes.every((s) => s.narrated);
+  const cur = p.steps.current === "done" ? "deliver" : p.steps.current;
+  const view = viewStep[id] || cur;
+  const done = Object.fromEntries(p.steps.list.map((s) => [s.key, s.done]));
+  const order = p.steps.list.map((s) => s.key);
+  const before = order.slice(0, order.indexOf(view)).filter((k) => !done[k]);
   const illus = p.scenes.filter((s) => s.name !== "end-card");
-  const imagesAll = illus.length && illus.every((s) => s.img);
-  const n = (ok, i) => `<span class="step-n ${ok ? "ok" : ""}">${ok ? "✓" : i}</span>`;
+  const missingImgs = illus.filter((s) => !s.img).length;
+  const unnarrated = p.scenes.filter((s) => !s.narrated);
+  const chars = unnarrated.reduce((n, s) => n + (s.text || "").length, 0);
+  const previewStale = p.preview && p.preview.mtime < p.timelineMtime;
+  const last = p.jobs[0];
+  // a failure shows on the step it belongs to (a question to Claude belongs to every step)
+  const failed = !busy && last?.status === "failed" && [view, null].includes(stepOf(last.title)) ? last : null;
+  const next = order[order.indexOf(view) + 1];
+  const goNext = next ? `<button data-view="${next}">Gå vidare till ${esc(STEP_NAMES[next])} →</button>` : "";
+
+  // the card for the step in view: a title, what it is, the facts, one main action
+  const card = { title: "", text: STEP_INTRO[view], facts: [], main: "", more: "", body: "" };
+  const pay = (action, label, what) => `<button class="primary" data-pay="${action}" data-what="${esc(what)}" ${busy ? "disabled" : ""}>${esc(label)}</button>`;
+  const run = (attrs, label, primary = true) => `<button ${primary ? 'class="primary"' : ""} ${attrs} ${busy ? "disabled" : ""}>${esc(label)}</button>`;
+
+  if (view === "script") {
+    if (p.demo || !p.scenes.length) {
+      card.title = "Låt Claude skriva manuset";
+      card.facts = ["Tar några minuter", "Ingår i ditt Claude-abonnemang"];
+      card.main = run('data-preset="script"', "Skriv manuset");
+    } else if (!done.script) {
+      card.title = "Läs manuset";
+      card.text = `${p.scenes.length} scener, ungefär ${p.seconds} sekunder. Läs texten som berättaren ska säga. Vill du ändra något, skriv det i rutan nedanför.`;
+      card.main = run('data-approve="script"', "Manuset är klart");
+    } else {
+      card.title = "Manuset är godkänt";
+      card.text = "Ändrar du manuset nu behöver du godkänna det igen, och scener som redan är inlästa läses in på nytt.";
+      card.main = goNext;
+    }
+    if (p.scenes.length && !p.demo)
+      card.body = `<div class="scenes">${p.scenes.map((s) => `<div class="scene"><div class="scene-h"><b>${esc(s.title || s.name)}</b><span class="muted small">${s.seconds} s</span></div><p>${esc(s.text)}</p></div>`).join("")}</div>`;
+    card.more = p.brief ? `<details><summary>Briefen</summary><div class="log-md">${esc(p.brief)}</div></details>` : "";
+  }
+
+  if (view === "voice") {
+    if (!p.voice.id && p.voice.previews.length) {
+      card.title = "Välj berättarröst";
+      card.text = "Lyssna på proven och välj den röst som passar. Den sparas så att du kan använda den igen.";
+      card.body = `<div class="stack">${p.voice.previews.map((v) => `<div class="row"><span class="small" style="width:90px">Prov ${v.take}</span><audio controls preload="none" src="${fileUrl(id, v.src)}" style="flex:1;min-width:180px"></audio><button data-pick="${esc(v.generated_voice_id)}" ${busy ? "disabled" : ""}>Välj</button></div>`).join("")}</div>`;
+      card.main = pay("voice-preview", "Gör tre nya prov", "Tre nya röstprov (ElevenLabs, några hundra tecken)");
+    } else if (!p.voice.id) {
+      card.title = "Gör röstprov";
+      card.text = "ElevenLabs gör tre förslag på berättarröst utifrån beskrivningen nedan. Du lyssnar och väljer en.";
+      card.facts = ["Kostar några hundra tecken hos ElevenLabs", "Tar under en minut"];
+      card.body = `<p class="small muted">${esc(p.voice.design.description || "")}</p>`;
+      card.main = pay("voice-preview", "Gör tre röstprov", "Tre röstprov (ElevenLabs, några hundra tecken)");
+    } else if (unnarrated.length) {
+      card.title = "Läs in rösten";
+      card.text = `${esc(p.voice.name || "Berättaren")} läser ${unnarrated.length === p.scenes.length ? "manuset" : `${unnarrated.length} ändrade scener`}, scen för scen. Efteråt lyssnar du.`;
+      card.facts = [`Kostar ungefär ${kr(chars)} tecken<span data-credit="eleven"></span>`, "Tar ungefär en minut"];
+      card.main = pay("narrate", "Läs in rösten", `Berättarröst, ungefär ${kr(chars)} tecken hos ElevenLabs`);
+    } else {
+      card.title = "Lyssna på rösten";
+      card.text = "Lyssna scen för scen. Låter något fel, skriv vad i rutan nedanför så skriver Claude om texten, och bara den scenen läses in igen.";
+      card.body = `<div class="scenes">${p.scenes.filter((s) => s.audio).map((s) => `<div class="scene"><div class="scene-h"><b>${esc(s.title || s.name)}</b></div><audio controls preload="none" src="${fileUrl(id, s.audio)}"></audio><p class="small muted">${esc(s.text)}</p></div>`).join("")}</div>`;
+      card.main = goNext;
+      card.more = `<button class="link small" data-voice-profile>Spara ${esc(p.voice.name || "rösten")} som ${esc(p.profileName)}s standardröst</button>`;
+    }
+    card.more += `<details style="margin-top:8px"><summary>Byt röst eller ändra beskrivningen</summary>
+      <form id="voicef" class="stack" style="margin-top:8px">
+        <div><label>Beskrivning av berättaren <span class="hint">– på engelska: kön, ålder, klang, tempo, dialekt</span></label><textarea name="description" rows="3">${esc(p.voice.design.description || "")}</textarea></div>
+        <div><label>Provtext</label><textarea name="text" rows="2">${esc(p.voice.design.text || "")}</textarea></div>
+        <div class="two"><div><label>Färdig röst från ElevenLabs: Voice ID</label><input type="text" name="voice_id" value="${esc(p.voice.id || "")}"></div><div><label>Namn</label><input type="text" name="name" value="${esc(p.voice.name || "")}"></div></div>
+        <div class="row"><button ${busy ? "disabled" : ""}>Spara</button></div>
+      </form></details>`;
+  }
+
+  if (view === "images") {
+    if (!p.shots) {
+      card.title = "Låt Claude beskriva bilderna";
+      card.text = "Claude skriver en bildbeskrivning per scen i kundens bildstil. Du läser dem innan något kostar pengar.";
+      card.facts = ["Tar någon minut", "Ingår i ditt Claude-abonnemang"];
+      card.main = run('data-preset="shots"', "Beskriv bilderna");
+    } else if (missingImgs) {
+      card.title = `Skapa ${missingImgs === 1 ? "bilden" : `${missingImgs} bilder`}`;
+      card.text = "Läs beskrivningarna. Vill du ändra något, skriv det i rutan nedanför innan du skapar bilderna.";
+      card.facts = [`Kostar ungefär ${(missingImgs * 0.14).toFixed(2).replace(".", ",")} dollar<span data-credit="openrouter"></span>`, "Tar en till två minuter"];
+      card.body = `<div class="scenes">${p.shotList.map((s) => `<div class="scene"><div class="scene-h"><b>${esc(s.id.replace(/^film-/, "Scen "))}</b></div><p class="small">${esc(s.prompt)}</p></div>`).join("")}</div>`;
+      card.main = pay("images", card.title, `${missingImgs} illustrationer (Gemini via OpenRouter, ca 0,14 dollar styck)`);
+    } else {
+      card.title = "Titta på bilderna";
+      card.text = "Gör om en bild som inte blev bra. Siffror och text läggs på i nästa steg.";
+      card.body = `<div class="thumbs big">${illus.map((s) => `<figure><img loading="lazy" src="${fileUrl(id, s.img)}" alt=""><figcaption class="spread"><span>${esc(s.title || s.id)}</span><button class="link small" data-redo="film-${esc(s.id)}" ${busy ? "disabled" : ""}>Gör om</button></figcaption></figure>`).join("")}</div>`;
+      card.main = goNext;
+    }
+  }
+
+  if (view === "review") {
+    if (!p.scenesBuilt) {
+      card.title = "Låt Claude bygga scenerna";
+      card.facts = ["Tar 5 till 15 minuter", "Ingår i ditt Claude-abonnemang"];
+      card.main = run('data-preset="scenes"', "Bygg scenerna");
+    } else if (!p.preview || previewStale) {
+      card.title = p.preview ? "Filmen har ändrats" : "Gör en snabbversion";
+      card.text = "En snabbversion i halv upplösning av hela filmen, med röst och bilder, så att du kan titta på den här.";
+      card.facts = ["Tar en till två minuter", "Kostar inget"];
+      card.main = run('data-act="preview"', p.preview ? "Gör en ny snabbversion" : "Gör en snabbversion");
+    } else if (!done.review) {
+      card.title = "Titta på filmen";
+      card.text = "Är något fel, skriv det i rutan nedanför. Claude ändrar, och du gör en ny snabbversion.";
+      card.main = run('data-approve="review"', "Ser bra ut");
+    } else {
+      card.title = "Filmen är godkänd";
+      card.main = goNext;
+    }
+    if (p.preview) card.body = `<video id="previewvid" controls preload="metadata" src="${fileUrl(id, p.preview.path, p.preview.mtime)}"></video>`;
+  }
+
+  if (view === "deliver") {
+    card.title = p.renders.length ? "Färdiga filer" : "Gör de färdiga filmerna";
+    card.text = `${p.formats.join(" och ")}, med jämn ljudnivå och undertexter. ${p.renders.length ? "Gör om filmerna när du har ändrat något." : ""}`;
+    card.facts = [`Tar några minuter${p.formats.length > 1 ? " per format" : ""}`, "Kostar inget"];
+    card.main = run('data-act="render"', p.renders.length ? "Gör filmerna igen" : "Gör de färdiga filmerna", !p.renders.length);
+    card.body = p.renders.length || p.subtitles.length
+      ? `<div class="stack">${p.renders.map((r) => `<div class="file"><video controls preload="metadata" src="${fileUrl(id, "out/" + r.name, r.mtime)}"></video><div class="spread small"><span><b>${esc(r.name)}</b> <span class="muted">${(r.size / 1e6).toFixed(1).replace(".", ",")} MB · ${ago(r.mtime)}</span></span><button class="link" data-file="out/${esc(r.name)}">Visa i Finder</button></div></div>`).join("")}
+         ${p.subtitles.map((r) => `<div class="spread small"><span><b>${esc(r.name)}</b> <span class="muted">undertexter</span></span><button class="link" data-file="out/${esc(r.name)}">Visa i Finder</button></div>`).join("")}</div>`
+      : "";
+    card.more = p.renders.length ? `<button class="link small" data-reveal="out">Öppna mappen med de färdiga filerna</button>` : "";
+  }
+
+  // out of order is allowed, but then the main button is not the one to press
+  if (before.length) card.main = card.main.replace('class="primary"', "");
+  const status = busy
+    ? `<div class="working"><div class="row"><span class="spinner"></span><b>${esc(p.running.title)}</b><span class="muted small" id="lastline"></span></div><details style="margin-top:6px"><summary class="small">Visa vad som händer</summary><div id="console" class="console" style="margin-top:6px"></div></details></div>`
+    : failed
+      ? `<div class="problem"><b>${esc(failed.title)} gick inte.</b> <span id="why">…</span><div class="row" style="margin-top:8px"><button data-fix="${failed.id}">Låt Claude titta på felet</button><button class="link small" data-job="${failed.id}">Visa detaljer</button></div><div id="faillog"></div></div>`
+      : "";
 
   app.innerHTML = `
-    <div class="stack">
+    <div class="stack film">
       <div class="spread">
-        <div><h1>${esc(p.title)}</h1>
-          <div class="muted">${swatch(p.palette)} ${esc(p.profileName)} · ${modeName(p.mode)} · ${p.formats.join(" + ")} ${p.scenes.length ? `· ${p.scenes.length} scener · ${p.seconds} s` : ""}</div></div>
-        <div class="row">
-          <button data-studio ${p.studio ? 'class="primary"' : ""}>${p.studio ? "Öppna förhandsvisning" : "▶ Förhandsgranska"}</button>
-          ${p.studio ? `<button data-studio-stop class="link">stäng</button>` : ""}
-          <button data-reveal="">Visa i ${state.platform === "darwin" ? "Finder" : "mappen"}</button>
-        </div>
+        <div><h1>${esc(p.title)}</h1><div class="muted">${swatch(p.palette)} ${esc(p.profileName)} · ${modeName(p.mode)} · ${p.formats.join(" och ")}${p.scenes.length ? ` · ${p.scenes.length} scener · ${p.seconds} s` : ""}</div></div>
+        ${p.preview ? `<button data-play>▶ Spela snabbversionen</button>` : ""}
       </div>
-      <div class="cols">
-        <div class="panel">
-          <div class="section">
-            <div class="step-h">${n(p.brief && !p.demo, 1)}<h2 style="margin:0">Brief och manus</h2></div>
-            ${p.brief ? `<details><summary>Brief</summary><div class="log-md">${esc(p.brief)}</div></details>` : `<p class="warn">Ingen brief – skriv en i notes/brief.md eller be Claude nedan.</p>`}
-            ${p.demo ? `<p class="small muted">Manuset är fortfarande mallens demo om skottår.</p>` : ""}
-            <div class="row" style="margin-top:8px"><button data-preset="script" ${dis}>✦ Claude: research och manus</button></div>
-            ${p.scenes.length ? `<table style="margin-top:12px"><tr><th>Scen</th><th>Titel</th><th>Tid</th><th>Röst</th><th>Bild</th></tr>
-              ${p.scenes.map((s) => `<tr><td>${esc(s.id)}</td><td>${esc(s.title)}<div class="small muted">${esc(s.text.slice(0, 110))}${s.text.length > 110 ? "…" : ""}</div></td><td>${s.seconds}s</td><td>${s.narrated ? '<span class="ok">✓</span>' : '<span class="muted">–</span>'}</td><td>${s.name === "end-card" ? '<span class="muted small">logga</span>' : s.img ? '<span class="ok">✓</span>' : '<span class="muted">–</span>'}</td></tr>`).join("")}</table>` : ""}
-          </div>
-
-          <div class="section">
-            <div class="step-h">${n(narratedAll, 2)}<h2 style="margin:0">Röst</h2></div>
-            ${p.voice.id ? `<p class="small">Berättare: <b>${esc(p.voice.name || p.voice.id)}</b></p>
-              <div class="row"><button data-act="narrate-dry" ${dis}>Vad kostar det?</button><span class="small muted">Visar vad som skulle debiteras, utan att något debiteras.</span></div>`
-            : `<p class="small muted">Ingen berättarröst vald ännu. Gör tre provtagningar utifrån profilens röstbeskrivning (voice/design.json) och välj en.</p>
-              <div class="row"><button class="pay" data-pay="voice-preview" data-what="Tre provtagningar av berättarrösten (ElevenLabs Voice Design, ca några hundra krediter)" ${dis}>Designa röst: 3 provtagningar</button></div>
-              ${p.voice.previews.length ? `<div class="stack" style="margin-top:10px">${p.voice.previews.map((v) => `<div class="row"><span class="small" style="width:120px">${esc(v.tag)} · tagning ${v.take}</span><audio controls preload="none" src="${fileUrl(id, v.src)}" style="flex:1;min-width:180px"></audio><button data-pick="${esc(v.generated_voice_id)}" ${dis}>Välj</button></div>`).join("")}</div>` : ""}`}
-            <div id="gate-narrate"></div>
-            <details style="margin-top:10px" ${p.voice.id ? "" : "open"}><summary>Röstinställningar</summary>
-              <form id="voicef" class="stack" style="margin-top:8px">
-                <div><label>Beskrivning av berättaren <span class="hint">– på engelska: kön, ålder, klang, tempo, dialekt, tonläge</span></label>
-                  <textarea name="description" rows="4">${esc(p.voice.design.description || "")}</textarea></div>
-                <div><label>Provtext <span class="hint">– på filmens språk och i dess ton, läses i provtagningarna</span></label>
-                  <textarea name="text" rows="3">${esc(p.voice.design.text || "")}</textarea></div>
-                <div class="two"><div><label>… eller en färdig röst: Voice ID <span class="hint">– från ElevenLabs</span></label><input type="text" name="voice_id" value="${esc(p.voice.id || "")}" placeholder="t.ex. 21m00Tcm4TlvDq8ikWAM"></div>
-                  <div><label>Namn</label><input type="text" name="name" value="${esc(p.voice.name || "")}" placeholder="Berättare"></div></div>
-                <div class="row"><button class="primary" ${dis}>Spara rösten</button>${p.voice.id ? `<button type="button" data-voice-profile ${dis}>Spara som ${esc(p.profileName || "kundens")} standardröst</button>` : ""}</div>
-              </form>
-            </details>
-            ${p.scenes.some((s) => s.audio) ? `<details style="margin-top:10px"><summary>Lyssna scen för scen</summary>${p.scenes.filter((s) => s.audio).map((s) => `<h3>${esc(s.id)} · ${esc(s.title)}</h3><audio controls preload="none" src="${fileUrl(id, s.audio)}"></audio><p class="small muted">${esc(s.text)}</p>`).join("")}</details>` : ""}
-          </div>
-
-          <div class="section">
-            <div class="step-h">${n(imagesAll, 3)}<h2 style="margin:0">Bilder</h2></div>
-            <p class="small muted">${p.shots} bildbeskrivningar i art/shots.json. Bilderna innehåller aldrig text; siffror och rubriker ritas i kod.</p>
-            <div class="row"><button data-preset="shots" ${dis}>✦ Claude: bildprompter</button><button data-act="images-dry" ${dis}>Vad kostar det?</button></div>
-            <div id="gate-images"></div>
-            ${p.scenes.some((s) => s.img) ? `<div class="thumbs" style="margin-top:10px">${p.scenes.filter((s) => s.img).map((s) => `<figure><img loading="lazy" src="${fileUrl(id, s.img)}" alt=""><figcaption>${esc(s.id)} · ${esc(s.title)}</figcaption></figure>`).join("")}</div>` : ""}
-          </div>
-
-          <div class="section">
-            <div class="step-h">${n(false, 4)}<h2 style="margin:0">Scener</h2></div>
-            <div class="row"><button data-preset="scenes" ${dis}>✦ Claude: bygg scenerna</button><button data-preset="review" ${dis}>✦ Claude: granska</button></div>
-            <div class="row" style="margin-top:8px">${p.formats.map((f) => `<button data-stills="${f}" ${dis}>Stillbilder ${f}</button>`).join("")}</div>
-            ${p.formats.map((f) => (Object.keys(p.stills[f] || {}).length ? `<details ${f === main ? "open" : ""} style="margin-top:10px"><summary>Stillbilder ${f}</summary><div class="sheets stack" style="margin-top:8px">${Object.entries(p.stills[f]).map(([sid, st]) => `<figure style="margin:0"><figcaption class="small muted">${esc(sid)}</figcaption><img loading="lazy" src="${fileUrl(id, st.path, st.mtime)}" alt=""></figure>`).join("")}</div></details>` : "")).join("")}
-          </div>
-
-          <div class="section">
-            <div class="step-h">${n(p.renders.length > 0, 5)}<h2 style="margin:0">Rendera och leverera</h2></div>
-            <div class="row"><button class="primary" data-render="" ${dis}>Rendera ${p.formats.length > 1 ? "alla format" : main}</button>${p.formats.length > 1 ? p.formats.map((f) => `<button data-render="${f}" ${dis}>Bara ${f}</button>`).join("") : ""}<button data-reveal="out">Öppna leveransmappen</button></div>
-            ${p.renders.length ? `<div class="stack" style="margin-top:12px">${p.renders.map((r) => `<div><div class="spread small"><b>${esc(r.name)}</b><span class="muted">${(r.size / 1e6).toFixed(1)} MB · ${ago(r.mtime)}</span></div><video controls preload="metadata" src="${fileUrl(id, "out/" + r.name, r.mtime)}"></video></div>`).join("")}</div>` : `<p class="small muted">Renderingen bygger tidslinjen, kontrollerar cues och normaliserar ljudet till −14 LUFS. Ett klipp tar några minuter.</p>`}
-          </div>
-        </div>
-
-        <div class="stack">
-          <div class="panel">
-            <h2>✦ Be Claude</h2>
-            <form id="ask"><textarea name="prompt" placeholder="T.ex. ”Gör scen 2 luftigare och byt rubriken till Så fördelas pengarna”" ${dis}></textarea>
-              <div class="row" style="margin-top:8px"><button class="primary" ${dis}>Skicka</button>${p.claudeSession ? `<button type="button" class="link small" data-reset>Börja ett nytt samtal</button>` : ""}</div></form>
-            ${p.claudeLast?.result ? `<details open style="margin-top:12px"><summary>Claudes senaste svar <span class="muted small">${ago(p.claudeLast.at)}</span></summary><div class="answer">${md(p.claudeLast.result)}</div></details>` : ""}
-          </div>
-          <div class="panel">
-            <div class="spread"><h2>Aktivitet</h2>${busy ? `<button class="danger" data-stop="${p.running.id}">Avbryt</button>` : ""}</div>
-            <div id="console" class="console">${busy ? "" : p.jobs.length ? "Välj ett jobb nedan för att se dess logg." : "Inget har körts ännu."}</div>
-            ${p.jobs.length ? `<div class="small" style="margin-top:8px">${p.jobs.slice(0, 8).map((j) => `<div class="spread"><button class="link" data-job="${j.id}">${esc(j.title)}</button><span class="${j.status === "done" ? "ok" : j.status === "running" ? "warn" : "bad"}">${{ done: "klart", running: "körs", failed: "misslyckades", stopped: "avbrutet" }[j.status]} · ${ago(j.started)}</span></div>`).join("")}</div>` : ""}
-          </div>
-          <div class="panel"><details><summary>Produktionslogg (notes/log.md)</summary><div class="log-md">${esc(p.log)}</div></details></div>
-        </div>
+      <div class="stepbar">${p.steps.list.map((s, i) => `<button data-view="${s.key}" class="${s.done ? "done" : ""} ${s.key === view ? "on" : ""} ${s.key === cur && !s.done ? "next" : ""}"><span class="n">${s.done ? "✓" : i + 1}</span>${esc(s.label)}</button>`).join("")}</div>
+      <div class="panel stepcard">
+        <div class="muted small">${view === cur && !done[view] ? "Nästa steg" : `Steg ${order.indexOf(view) + 1} · ${esc(STEP_NAMES[view])}`}</div>
+        <h2 class="big">${esc(card.title)}</h2>
+        ${before.length && view !== cur ? `<p class="warn small">Gör ${list(before.map((k) => STEP_NAMES[k]))} först. <button class="link small" data-view="${cur}">Till nästa steg</button></p>` : ""}
+        <p class="muted">${card.text}</p>
+        ${card.facts.length ? `<div class="facts">${card.facts.map((f) => `<span>${f}</span>`).join("")}</div>` : ""}
+        ${status}
+        <div class="row" style="margin-top:12px">${card.main}</div>
+        ${card.body ? `<div style="margin-top:16px">${card.body}</div>` : ""}
+        ${card.more ? `<div style="margin-top:12px">${card.more}</div>` : ""}
       </div>
+      <div class="panel">
+        <h2>Vill du ändra något?</h2>
+        ${CHIPS[view].length ? `<div class="chips">${CHIPS[view].map((c) => `<button class="chip" data-chip="${esc(c)}" ${busy ? "disabled" : ""}>${esc(c)}</button>`).join("")}</div>` : ""}
+        <form id="ask"><textarea name="prompt" rows="2" placeholder="Skriv med egna ord, till exempel ”Byt rubriken i scen 2 till Så fördelas pengarna”" ${busy ? "disabled" : ""}></textarea>
+          <div class="row" style="margin-top:8px"><button class="primary" ${busy ? "disabled" : ""}>Be Claude</button>${p.claudeSession ? `<button type="button" class="link small" data-reset>Börja ett nytt samtal</button>` : ""}</div></form>
+        ${p.claudeLast?.result ? `<details ${p.claudeLast.at > Date.now() - 3600e3 ? "open" : ""} style="margin-top:12px"><summary>Claudes senaste svar <span class="muted small">${ago(p.claudeLast.at)}</span></summary><div class="answer">${md(p.claudeLast.result)}</div></details>` : ""}
+      </div>
+      <details class="panel tech">
+        <summary>Tekniska detaljer</summary>
+        <div class="stack" style="margin-top:12px">
+          <div id="techlog" class="console">${p.jobs.length ? "Välj ett jobb för att se dess logg." : "Inget har körts ännu."}</div>
+          ${p.jobs.length ? `<div class="small">${p.jobs.slice(0, 10).map((j) => `<div class="spread"><button class="link" data-job="${j.id}">${esc(j.title)}</button><span class="${j.status === "done" ? "ok" : j.status === "running" ? "warn" : "bad"}">${{ done: "klart", running: "körs", failed: "misslyckades", stopped: "avbrutet" }[j.status]} · ${ago(j.started)}</span></div>`).join("")}</div>` : ""}
+          ${busy ? `<div><button class="danger" data-stop="${p.running.id}">Avbryt det som körs</button></div>` : ""}
+          <div class="row">${p.formats.map((f) => `<button data-stills="${f}" ${busy ? "disabled" : ""}>Stillbilder ${f}</button>`).join("")}<button data-studio>${p.studio ? "Öppna Remotion Studio" : "Remotion Studio"}</button><button data-reveal="">Projektmappen i Finder</button></div>
+          ${p.formats.map((f) => (Object.keys(p.stills[f] || {}).length ? `<details><summary>Stillbilder ${f}</summary><div class="sheets stack" style="margin-top:8px">${Object.entries(p.stills[f]).map(([sid, st]) => `<figure style="margin:0"><figcaption class="small muted">${esc(sid)}</figcaption><img loading="lazy" src="${fileUrl(id, st.path, st.mtime)}" alt=""></figure>`).join("")}</div></details>` : "")).join("")}
+          <details><summary>Produktionslogg</summary><div class="log-md">${esc(p.log)}</div></details>
+        </div>
+      </details>
     </div>`;
 
   const reload = () => projectPage(id).catch((e) => toast(e.message));
   const act = async (action, args = {}) => {
     try {
-      const { job } = await api(`projects/${encodeURIComponent(id)}/action`, { body: { action, args } });
+      await api(`projects/${enc}/action`, { body: { action, args } });
       await reload();
-      return job;
     } catch (e) {
       toast(e.message);
     }
   };
+  const claude = async (prompt, title) => act("claude", { prompt, title: title || `Claude: ${prompt.slice(0, 40)}${prompt.length > 40 ? "…" : ""}` });
 
-  // a paid step: run the dry-run, show what it says, then ask for an explicit yes
-  const gate = async (dry, real, box, what) => {
-    const job = await act(dry);
-    if (!job) return;
-    watchJob(job.id, $("#console"), async (status) => {
-      await reload();
-      if (status !== "done") return;
-      const j = await (await fetch(`/api/jobs/${job.id}/stream`)).text();
-      const lines = j.split("\n\n").filter((x) => x.startsWith("data: ")).flatMap((x) => {
-        const ev = JSON.parse(x.slice(6));
-        return ev.type === "hello" ? ev.lines.map((l) => l.line) : [];
-      }).filter((l) => !l.startsWith("▸"));
-      const out = lines.join("\n");
-      const nothing = /^0 (scenes|shots)/m.test(out);
-      $(box).innerHTML = `<div class="gate"><b>${esc(what)}</b><pre>${esc(out)}</pre>${nothing ? `<span class="small muted">Inget att göra.</span>` : `<div class="row"><button class="pay" data-go>Godkänn och kör</button><button data-no>Avbryt</button></div>`}</div>`;
-      $(`${box} [data-no]`)?.addEventListener("click", () => ($(box).innerHTML = ""));
-      $(`${box} [data-go]`)?.addEventListener("click", () => act(real, { estimate: lines[0] }));
-    });
-  };
-
+  app.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
+    viewStep[id] = b.dataset.view === cur ? undefined : b.dataset.view;
+    reload();
+    window.scrollTo({ top: 0 });
+  }));
+  app.querySelector("[data-play]")?.addEventListener("click", async () => {
+    viewStep[id] = "review";
+    await reload();
+    $("#previewvid")?.play();
+  });
   app.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", async () => {
     try {
-      await api(`projects/${encodeURIComponent(id)}/preset`, { body: { preset: b.dataset.preset } });
+      await api(`projects/${enc}/preset`, { body: { preset: b.dataset.preset } });
       reload();
     } catch (e) {
       toast(e.message);
     }
   }));
-  app.querySelector("[data-act=narrate-dry]")?.addEventListener("click", () => gate("narrate-dry", "narrate", "#gate-narrate", "Berättarröst (ElevenLabs) – det här skulle debiteras:"));
-  app.querySelector("[data-act=images-dry]")?.addEventListener("click", () => gate("images-dry", "images", "#gate-images", "Illustrationer (Gemini via OpenRouter, ca 0,14 USD per bild):"));
+  app.querySelectorAll("[data-approve]").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await api(`projects/${enc}/approve`, { body: { step: b.dataset.approve } });
+      viewStep[id] = undefined;
+      reload();
+    } catch (e) {
+      toast(e.message);
+    }
+  }));
+  app.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => act(b.dataset.act)));
+  app.querySelectorAll("[data-pay]").forEach((b) => b.addEventListener("click", async () => {
+    if (await ask({ title: "Det här kostar pengar", text: b.dataset.what, ok: "Godkänn och kör", pay: true })) act(b.dataset.pay, { estimate: b.dataset.what });
+  }));
+  app.querySelectorAll("[data-redo]").forEach((b) => b.addEventListener("click", async () => {
+    if (await ask({ title: "Gör om bilden?", text: "En ny bild kostar ungefär 0,14 dollar.", ok: "Gör om", pay: true })) act("images", { ids: [b.dataset.redo], estimate: `ny bild ${b.dataset.redo}, ca 0,14 dollar` });
+  }));
+  app.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", async () => {
+    const name = await ask({ title: "Spara rösten", text: "Namnet sparas i ElevenLabs och i projektet.", input: `${p.profileName || "Berättare"} – berättare`, ok: "Spara" });
+    if (name) act("voice-create", { gid: b.dataset.pick, name });
+  }));
   $("#voicef")?.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = Object.fromEntries(new FormData(e.target).entries());
     try {
-      await api(`projects/${encodeURIComponent(id)}/voice`, { body: fd });
-      toast(fd.voice_id ? "Rösten är sparad" : "Röstbeskrivningen är sparad");
+      await api(`projects/${enc}/voice`, { body: fd });
+      toast(fd.voice_id ? "Rösten är sparad" : "Beskrivningen är sparad");
       reload();
     } catch (err) {
       toast(err.message);
     }
   });
   app.querySelector("[data-voice-profile]")?.addEventListener("click", async () => {
-    if (!(await ask({ title: "Spara som kundens standardröst?", text: `Kommande filmer för ${p.profileName} får samma berättare, utan ny röstdesign.`, ok: "Spara" }))) return;
-    try {
-      await api(`projects/${encodeURIComponent(id)}/voice-to-profile`, { body: {} });
-      toast("Sparad i kundprofilen");
-    } catch (err) {
-      toast(err.message);
-    }
+    if (!(await ask({ title: "Spara som standardröst?", text: `Kommande filmer för ${p.profileName} får samma berättare, utan nya röstprov.`, ok: "Spara" }))) return;
+    api(`projects/${enc}/voice-to-profile`, { body: {} }).then(() => toast("Sparad i kundprofilen"), (e) => toast(e.message));
   });
-  app.querySelectorAll("[data-pay]").forEach((b) => b.addEventListener("click", async () => {
-    if (await ask({ title: "Det kostar pengar", text: b.dataset.what, ok: "Godkänn och kör", pay: true })) act(b.dataset.pay, { estimate: b.dataset.what });
-  }));
-  app.querySelectorAll("[data-pick]").forEach((b) => b.addEventListener("click", async () => {
-    const name = await ask({ title: "Spara rösten", text: "Namnet sparas i ElevenLabs och i projektet.", input: `${p.profileName || "Berättare"} – berättare`, ok: "Spara" });
-    if (name) act("voice-create", { gid: b.dataset.pick, name });
-  }));
+  app.querySelectorAll("[data-chip]").forEach((b) => b.addEventListener("click", () => claude(b.dataset.chip)));
+  $("#ask").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const prompt = e.target.prompt.value.trim();
+    if (prompt) claude(prompt);
+  });
+  app.querySelector("[data-reset]")?.addEventListener("click", () => api(`projects/${enc}/claude-reset`, { body: {} }).then(reload));
+  app.querySelectorAll("[data-file]").forEach((b) => b.addEventListener("click", () => api(`projects/${enc}/reveal-file`, { body: { path: b.dataset.file } }).catch((e) => toast(e.message))));
+  app.querySelectorAll("[data-reveal]").forEach((b) => b.addEventListener("click", () => api(`projects/${enc}/reveal`, { body: { sub: b.dataset.reveal } }).catch((e) => toast(e.message))));
   app.querySelectorAll("[data-stills]").forEach((b) => b.addEventListener("click", () => act("stills", { format: b.dataset.stills })));
-  app.querySelectorAll("[data-render]").forEach((b) => b.addEventListener("click", () => act("render", b.dataset.render ? { format: b.dataset.render } : {})));
-  app.querySelectorAll("[data-reveal]").forEach((b) => b.addEventListener("click", () => api(`projects/${encodeURIComponent(id)}/reveal`, { body: { sub: b.dataset.reveal } }).catch((e) => toast(e.message))));
   app.querySelector("[data-studio]")?.addEventListener("click", async (e) => {
     e.target.disabled = true;
-    e.target.textContent = "Startar förhandsvisningen …";
+    e.target.textContent = "Startar Remotion Studio …";
     try {
-      const { port } = await api(`projects/${encodeURIComponent(id)}/studio`, { body: {} });
+      const { port } = await api(`projects/${enc}/studio`, { body: {} });
       window.open(`http://localhost:${port}`, `studio-${id}`);
     } catch (err) {
       toast(err.message);
     }
     reload();
   });
-  app.querySelector("[data-studio-stop]")?.addEventListener("click", () => api(`projects/${encodeURIComponent(id)}/studio`, { body: { stop: true } }).then(reload));
   app.querySelector("[data-stop]")?.addEventListener("click", (e) => api(`jobs/${e.target.dataset.stop}/stop`, { body: {} }).then(reload));
-  app.querySelector("[data-reset]")?.addEventListener("click", () => api(`projects/${encodeURIComponent(id)}/claude-reset`, { body: {} }).then(reload));
-  app.querySelectorAll("[data-job]").forEach((b) => b.addEventListener("click", () => watchJob(b.dataset.job, $("#console"))));
-  $("#ask").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const prompt = e.target.prompt.value.trim();
-    if (!prompt) return;
-    await act("claude", { prompt, title: `Claude: ${prompt.slice(0, 40)}${prompt.length > 40 ? "…" : ""}` });
-  });
-  if (busy) watchJob(p.running.id, $("#console"), () => reload());
+  app.querySelectorAll("[data-job]").forEach((b) => b.addEventListener("click", () => {
+    app.querySelector("details.tech").open = true;
+    watchJob(b.dataset.job, $("#techlog"));
+  }));
+
+  // what is left on the paid services, next to the cost
+  if (app.querySelector("[data-credit]"))
+    api("credits").then((c) => {
+      const e = c.eleven && app.querySelector('[data-credit="eleven"]');
+      if (e) e.textContent = ` av ${kr(c.eleven.left)} kvar`;
+      const o = c.openrouter && app.querySelector('[data-credit="openrouter"]');
+      if (o) o.textContent = ` (${String(c.openrouter.left).replace(".", ",")} dollar kvar)`;
+    }, () => {});
+
+  if (failed) {
+    jobText(failed.id).then((text) => {
+      $("#why").textContent = explain(text);
+      app.querySelector("[data-fix]")?.addEventListener("click", () =>
+        claude(`Steget "${failed.title}" misslyckades. Här är slutet av loggen:\n\n${text.split("\n").slice(-40).join("\n")}\n\nTa reda på varför och rätta det om det går utan betalda steg. Förklara kort på svenska vad som hände och vad jag ska göra nu i appen.`, "Claude: titta på felet"));
+    });
+  }
+  if (busy)
+    watchJob(p.running.id, $("#console"), () => reload(), (l) => {
+      const el = $("#lastline");
+      if (el && l.line && !l.line.startsWith("▸")) el.textContent = l.line.replace(/^💬 /, "").slice(0, 120);
+    });
 }
 
 /** Follow a job's log in a console element; done(status) when it ends. */
-function watchJob(jobId, el, done) {
+function watchJob(jobId, el, done, onLine) {
   closeStream();
   el.classList.add("console");
   el.innerHTML = "";
@@ -409,7 +550,10 @@ function watchJob(jobId, el, done) {
   stream.onmessage = (m) => {
     const ev = JSON.parse(m.data);
     if (ev.type === "hello") ev.lines.forEach(add);
-    if (ev.type === "line") add(ev);
+    if (ev.type === "line") {
+      add(ev);
+      onLine?.(ev);
+    }
     if (ev.type === "end") {
       add({ kind: ev.status === "done" ? "step" : "err", line: ev.status === "done" ? "✓ klart" : `✗ ${ev.status}` });
       closeStream();
