@@ -57,6 +57,15 @@ const md = (t) =>
     )
     .join("");
 const modeName = (m) => (m === "klipp" ? "Klipp" : "Film");
+// a film's mood: how it feels within the sender's frame (value, label, what it means)
+const MOODS = [
+  ["saklig", "Saklig", "lugn och tydlig, fakta i centrum"],
+  ["varm", "Varm", "nära, mänsklig och hoppfull"],
+  ["inspirerande", "Inspirerande", "framåt, energi och möjligheter"],
+  ["lekfull", "Lekfull", "humor, lätthet och överraskning"],
+  ["allvarlig", "Allvarlig", "stillsam och respektfull"],
+];
+const moodLabel = (m) => MOODS.find(([v]) => v === m)?.[1] || m;
 const STEP_NAMES = { script: "Manus", voice: "Röst", images: "Bilder", review: "Titta igenom", deliver: "Leverera" };
 const ago = (t) => {
   const s = (Date.now() - t) / 1000;
@@ -154,6 +163,17 @@ function newPage(preselect) {
           <div><label>Syfte <span class="hint">– det tittaren ska ta med sig</span></label><input type="text" name="purpose"></div>
         </div>
         <label>Underlag <span class="hint">– länkar, siffror, källor, vad som måste med eller inte får sägas</span></label><textarea name="notes"></textarea>
+      </div>
+      <div>
+        <h2>Stämning</h2>
+        <p class="small muted" style="margin-top:-4px">Avsändarens utseende och tonalitet ligger fast. Stämningen styr tempo, bilder, musik och tilltal i just den här filmen.</p>
+        <div class="choice moods">${MOODS.map(([v, l, d], i) => `<label><input type="radio" name="mood" value="${v}" ${i === 0 ? "checked" : ""}><span><b>${l}</b><span class="small muted">${d}</span></span></label>`).join("")}</div>
+        <input type="text" name="moodOwn" placeholder="Eller med egna ord, till exempel ”somrig och lite nostalgisk”" style="margin-top:8px">
+        <div class="two">
+          <div><label>Slutkortets rad</label><input type="text" name="endLine" id="endline"></div>
+          <div><label>Kicker <span class="hint">– valfritt, liten text i titelbandet</span></label><input type="text" name="kicker"></div>
+          <div><label>Godkänner filmen <span class="hint">– valfritt</span></label><input type="text" name="approver"></div>
+        </div>
         <label>Bakgrundsmusik <span class="hint">– en lugn slinga lågt under rösten, eller ingen</span></label><select name="music" id="musicsel"></select>
         <label>Designsystem <span class="hint">– valfritt: länkar eller mappar för just den här filmen, utöver avsändarens (en per rad). Claude läser dem före manus, bildprompter och scener.</span></label><textarea name="designSystems" rows="2" placeholder="https://claude.ai/…"></textarea>
       </div>
@@ -172,8 +192,12 @@ function newPage(preselect) {
     const loops = p?.loops || [];
     $("#musicsel").innerHTML = [["none", "Ingen bakgrundsmusik"], ...loops.map((m) => [m.key, `Slingan ${m.label}`])].map(([v, l]) => `<option value="${esc(v)}" ${v === (p?.loop || "none") ? "selected" : ""}>${esc(l)}</option>`).join("")
       + (loops.length ? "" : `<option disabled>Avsändaren har inga slingor än – lägg till under Avsändare</option>`);
+    // the sender's end-card line and formats as a start; the film may differ
+    if (!f.endLine.dataset.touched) f.endLine.value = p?.endLine || "";
+    f.querySelectorAll("input[name=formats]").forEach((c) => (c.checked = (p?.formats || ["16:9", "1:1"]).includes(c.value)));
     $("#profinfo").innerHTML = p ? `${swatch(p.palette)} ${p.placeholder ? `<span class="warn">Profilen har platshållare för färger och logga – fyll i den innan filmen ska ut.</span>` : esc(p.language || "")}${ds}` : "";
   };
+  f.endLine.addEventListener("input", () => (f.endLine.dataset.touched = "1"));
   f.addEventListener("change", (e) => {
     if (e.target.name === "mode") lengths();
     if (e.target.name === "profile") prof();
@@ -416,7 +440,7 @@ async function projectPage(id) {
   app.innerHTML = `
     <div class="stack film">
       <div class="spread">
-        <div><h1>${esc(p.title)}</h1><div class="muted">${swatch(p.palette)} ${esc(p.profileName)} · ${modeName(p.mode)} · ${esc(p.formats.join(" och "))}${p.scenes.length ? ` · ${p.scenes.length} scener · ${p.seconds} s` : ""}</div></div>
+        <div><h1>${esc(p.title)}</h1><div class="muted">${swatch(p.palette)} ${esc(p.profileName)} · ${modeName(p.mode)}${p.film?.mood ? ` · ${esc(moodLabel(p.film.mood))}` : ""} · ${esc(p.formats.join(" och "))}${p.scenes.length ? ` · ${p.scenes.length} scener · ${p.seconds} s` : ""}</div></div>
         <div class="row">${p.preview ? `<button data-play>▶ Spela snabbversionen</button>` : ""}<button class="link danger small" data-delete-film ${busy ? "disabled" : ""}>Radera filmen</button></div>
       </div>
       ${p.profileNewer ? `<div class="panel banner small row" style="justify-content:space-between"><span>${esc(p.profileName)}s profil har ändrats sedan den lades in i filmen.</span><button data-profile-update ${busy ? "disabled" : ""}>Visa ändringarna</button></div>` : ""}
@@ -743,7 +767,8 @@ async function customerPage(id) {
       <div class="cols">
         <form class="panel" id="kf">
           <div class="section">
-            <h2>1 · Avsändarens material</h2>
+            <h2>1 · Underlag</h2>
+            <p class="small muted" style="margin-top:-4px">Det Claude bygger avsändaren av. Avsändaren är ramen som alla filmer delar: utseende och tonalitet. Allt om en enskild film, som ämne, stämning och längd, väljer du när du gör filmen.</p>
             <p class="small muted">Grafisk manual (PDF), loggor, typsnitt, exempelbilder, presentationer – det Claude ska bygga profilen av. Sparas bara på den här datorn.</p>
             <div class="drop" id="drop">Släpp filer här eller <label class="link" style="display:inline;margin:0;font-weight:600;cursor:pointer">välj filer<input type="file" id="mat" multiple hidden></label></div>
             ${k.material.length ? `<table style="margin-top:8px">${k.material.map((m) => `<tr><td>${/\.(png|jpe?g|svg|gif|webp)$/i.test(m.name) ? `<img src="${pfileUrl(id, m.path)}" style="height:28px;vertical-align:middle;margin-right:8px;border-radius:4px">` : "📄 "}${esc(m.name)}</td><td class="muted small">${m.size < 1e6 ? `${Math.max(1, Math.round(m.size / 1e3))} kB` : `${(m.size / 1e6).toFixed(1)} MB`}</td><td><button type="button" class="link danger small" data-rm="${esc(m.path)}">ta bort</button></td></tr>`).join("")}</table>` : ""}
@@ -755,7 +780,8 @@ async function customerPage(id) {
           </div>
 
           <div class="section">
-            <h2>2 · Logga och typsnitt</h2>
+            <h2>2 · Utseende</h2>
+            <h3>Logga och typsnitt</h3>
             <div class="row">
               <div class="logo-prev" style="background:${esc(pal.band || "#0b3d5c")}">${logoUrl ? `<img src="${logoUrl}" alt="">` : `<span class="small" style="color:${esc(pal.bandText || "#fff")}">ingen logga</span>`}</div>
               <label class="btn" style="margin:0">Byt logga (SVG/PNG)<input type="file" id="logo" accept=".svg,.png" hidden></label>
@@ -777,62 +803,57 @@ async function customerPage(id) {
                 return `<div class="small" style="margin-top:6px">${used.map((r) => `<b>${r === "display" ? "Rubriker" : "Text"}:</b> ${F[r].files.map((x) => `${esc(x.file.replace(/^fonts\//, ""))} (${esc(x.weight)})`).join(", ")}`).join("<br>")}</div>`;
               return k.fonts.length ? `<div class="small warn" style="margin-top:6px">Filerna används inte än. Välj Källa: Egna typsnittsfiler, skriv typsnittets namn och spara.</div>` : "";
             })()}
-          </div>
-
-          <div class="section">
-            <h2>3 · Färger</h2>
+            <h3>Färger</h3>
             <div class="colors">${ROLES.map(([r, label]) => `<label class="color"><input type="color" name="c_${r}" value="${hex(pal[r])}"><span><b>${esc(label)}</b><code>${esc(pal[r] || "")}</code></span></label>`).join("")}</div>
-          </div>
-
-          <div class="section">
-            <h2>4 · Form och rörelse</h2>
+            <h3>Form</h3>
             <div class="two">
-              <div><label>Rörelse</label>${sel("motion", P.motion || "slide", [["slide", "Lugn glidning (passar de flesta)"], ["deal", "Kort som delas ut (journalfilm)"]])}</div>
-              <div><label>Bakgrund</label>${sel("backdrop", P.backdrop || "plain", [["plain", "Enkel gradient"], ["starbursts", "Stjärnor (journalfilm)"]])}</div>
-              <div><label>Utan bild</label>${sel("ground", P.ground || "soft", [["soft", "Mjuka cirklar i profilens färger"], ["starburst", "Solfjäder (journalfilm)"]])}</div>
               <div><label>Kortets hörn</label>${sel("radius", String(P.card?.radius ?? 14), [["0", "Raka"], ["2", "Nästan raka"], ["8", "Lätt rundade"], ["14", "Rundade"], ["26", "Mycket rundade"]])}</div>
               <div><label>Kantlinje</label>${sel("border", String(P.card?.border ?? 0), [["0", "Ingen"], ["2", "Tunn"], ["5", "Tjock (journalfilm)"]])}</div>
-              <div><label>Filmkorn</label>${sel("filmLook", String(Boolean(P.filmLook)), [["false", "Av"], ["true", "På (gammal film)"]])}</div>
-              <div><label>Kicker <span class="hint">– liten text i titelbandet</span></label><input type="text" name="kicker" value="${esc(P.kicker || "")}"></div>
-              <div><label>Namn</label><input type="text" name="name" value="${esc(P.name || "")}"></div>
-              <div><label>Slutkortets rad</label><input type="text" name="end_line" value="${esc(P.endCard?.line || "")}"></div>
-              <div><label>Slutkortets adress</label><input type="text" name="end_url" value="${esc(P.endCard?.url || "")}"></div>
-              <div><label>Språk</label>${sel("lang", P.language === "en" ? "en" : "sv", [["sv", "Svenska (sv-SE)"], ["en", "Engelska (en-GB)"]])}</div>
-              <div><label>Standardformat</label><div class="row">${["16:9", "1:1", "9:16"].map((f) => `<label class="row" style="margin:0;font-weight:400"><input type="checkbox" name="fmt" value="${f}" ${(P.formats || ["16:9", "1:1"]).includes(f) ? "checked" : ""}> ${f}</label>`).join("")}</div></div>
+              <div><label>Webbadress <span class="hint">– visas på slutkortet</span></label><input type="text" name="end_url" value="${esc(P.endCard?.url || "")}"></div>
             </div>
-          </div>
-
-          <div class="section">
-            <h2>5 · Bildstil</h2>
+            <h3>Bildstil</h3>
             <label>Så ska illustrationerna se ut <span class="hint">– på engelska, läggs till i varje bildprompt</span></label>
             <textarea name="ink" rows="4">${esc(k.style.ink || "")}</textarea>
             <label>Aldrig i bilderna</label>
             <textarea name="never" rows="2">${esc(k.style.never || "")}</textarea>
+            <details style="margin-top:10px"><summary class="small">Mer om utseendet: rörelse, bakgrund och journalfilmsstil</summary>
+              <div class="two">
+                <div><label>Rörelse</label>${sel("motion", P.motion || "slide", [["slide", "Lugn glidning (passar de flesta)"], ["deal", "Kort som delas ut (journalfilm)"]])}</div>
+                <div><label>Bakgrund</label>${sel("backdrop", P.backdrop || "plain", [["plain", "Enkel gradient"], ["starbursts", "Stjärnor (journalfilm)"]])}</div>
+                <div><label>Utan bild</label>${sel("ground", P.ground || "soft", [["soft", "Mjuka cirklar i profilens färger"], ["starburst", "Solfjäder (journalfilm)"]])}</div>
+                <div><label>Filmkorn</label>${sel("filmLook", String(Boolean(P.filmLook)), [["false", "Av"], ["true", "På (gammal film)"]])}</div>
+              </div>
+            </details>
           </div>
 
           <div class="section">
-            <h2>6 · Röst</h2>
+            <h2>3 · Tonalitet</h2>
+            <div class="two">
+              <div><label>Namn</label><input type="text" name="name" value="${esc(P.name || "")}"></div>
+              <div><label>Språk</label>${sel("lang", P.language === "en" ? "en" : "sv", [["sv", "Svenska (sv-SE)"], ["en", "Engelska (en-GB)"]])}</div>
+            </div>
+            <label>Så låter avsändaren <span class="hint">– tilltal, ord att använda och undvika, värderingar och vad som aldrig får förekomma. Claude läser den före varje manus och bildbeskrivning.</span></label>
+            <textarea name="notes" rows="12" class="mono">${esc(k.notes)}</textarea>
+          </div>
+
+          <div class="section">
+            <h2>4 · Verktygslåda</h2>
+            <p class="small muted" style="margin-top:-4px">Valfritt: röster och musik som filmerna kan välja bland. Fylls på allteftersom.</p>
+            <details ${k.voice?.voice_id || k.design.description ? "open" : ""}><summary>Berättarröst</summary>
             <label>Beskrivning av berättaren <span class="hint">– på engelska</span></label>
             <textarea name="v_description" rows="3">${esc(k.design.description || "")}</textarea>
             <label>Provtext</label>
             <textarea name="v_text" rows="2">${esc(k.design.text || "")}</textarea>
             <div class="two"><div><label>Färdig röst: Voice ID <span class="hint">– avsändarens standardröst</span></label><input type="text" name="v_id" value="${esc(k.voice?.voice_id || "")}"></div>
               <div><label>Röstens namn</label><input type="text" name="v_name" value="${esc(k.voice?.name || "")}"></div></div>
-          </div>
-
-          <div class="section">
-            <h2>7 · Musik</h2>
+            </details>
+            <details ${k.loops?.length ? "open" : ""} style="margin-top:8px"><summary>Musikslingor</summary>
             <p class="small muted">Slingor som kan ligga i bakgrunden, lågt under rösten. Varje film väljer en eller ingen. Gör dem i Suno (instrumentala, 2–3 minuter, utan lång intro), eller be Claude Code göra dem åt dig.</p>
             ${(k.loops ||= []).length ? `<div class="stack" style="margin-top:8px">${k.loops.map((m) => `<div class="row"><input type="text" name="ml_${esc(m.key)}" value="${esc(m.label)}" style="width:150px" aria-label="Namn på slingan"><audio controls preload="none" src="${pfileUrl(id, m.path)}" style="flex:1;min-width:200px"></audio><button type="button" class="link danger small" data-rm="${esc(m.path)}">ta bort</button></div>`).join("")}</div>` : ""}
             <div class="row" style="margin-top:8px"><label class="btn" style="margin:0">Lägg till en slinga (WAV/MP3)<input type="file" id="musicf" accept=".wav,.mp3,.m4a,.aif,.aiff,.flac" multiple hidden></label></div>
             <label>Nya filmer får <span class="hint">– går att ändra per film</span></label>
             ${sel("music_default", k.loop || "", [["", "Ingen bakgrundsmusik"], ...k.loops.map((m) => [m.key, `Slingan ${m.label}`])])}
-          </div>
-
-          <div class="section">
-            <h2>8 · Tonalitet och regler</h2>
-            <p class="small muted">NOTES.md – Claude läser den före varje manus och bildprompt.</p>
-            <textarea name="notes" rows="12" class="mono">${esc(k.notes)}</textarea>
+            </details>
           </div>
           <div class="savebar"><button class="primary" ${dis}>Spara profilen</button><span class="small muted">Testbilderna visar hur det blir.</span></div>
         </form>
@@ -918,9 +939,9 @@ async function customerPage(id) {
     const sv = v("lang") === "sv";
     const body = {
       profile: {
-        name: v("name"), kicker: v("kicker"), language: sv ? "sv" : "en", locale: sv ? "sv-SE" : "en-GB",
-        formats: fd.getAll("fmt"), motion: v("motion"), backdrop: v("backdrop"), ground: v("ground"), filmLook: v("filmLook") === "true",
-        palette, fonts, card: { radius: Number(v("radius")), border: Number(v("border")) }, endCard: { line: v("end_line"), url: v("end_url") },
+        name: v("name"), language: sv ? "sv" : "en", locale: sv ? "sv-SE" : "en-GB",
+        motion: v("motion"), backdrop: v("backdrop"), ground: v("ground"), filmLook: v("filmLook") === "true",
+        palette, fonts, card: { radius: Number(v("radius")), border: Number(v("border")) }, endCard: { url: v("end_url") },
         designSystems: v("design_systems"),
       },
       style: { ink: v("ink"), never: v("never") },
@@ -930,10 +951,6 @@ async function customerPage(id) {
       links: v("links"),
       music: { loop: v("music_default"), labels: Object.fromEntries(k.loops.map((m) => [m.key, v(`ml_${m.key}`)])) },
     };
-    if (!body.profile.formats.length) {
-      toast("Välj minst ett standardformat");
-      return false;
-    }
     try {
       const r = await api(`${base}/save`, { body });
       dirty = false;

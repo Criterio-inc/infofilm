@@ -13,6 +13,7 @@ The template in `template/` is a complete, working film: a demo about leap years
 
 ## Profile, mode and format: decide these first
 - **Profile** (`profiles/`, or `$INFOFILM_PROFILES`): the client's look and sound, kept across films. It holds the palette by role, fonts, logo, card shape, motion, illustration style (`style.json`), narrator (`design.json`, `voice.json`), reusable music, and `NOTES.md` (tone, approvals, allowed services). `critero` (Critero Consulting AB) is the default. `newsreel` is the original 1950s house style; `_mall` is the starting point for a new client (`scripts/new_profile.sh`). **Read the profile's `NOTES.md` before writing a script or a prompt.** See [profiles/README.md](profiles/README.md).
+- **Mood** (`film.json` "mood"): how this film feels within the sender's frame (saklig, varm, inspirerande, lekfull, allvarlig, or the user's words). It colours the script, the picture prompts, the music and the tempo; the profile's look and tone stay. Ask for it at kick-off.
 - **Mode**:
   - `klipp`: 30–90 s, ONE message, 2–5 scenes, no parts and no commercial breaks. It is a hook in the first 2 seconds, 1–3 scenes that each show one thing, then the built-in `end-card` (logo, line, address).
   - `film`: 2–15 min in parts, as below.

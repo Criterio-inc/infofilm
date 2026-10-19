@@ -168,6 +168,8 @@ def build_brand():
     w, h = SIZES[FORMAT]
     out = {"format": FORMAT, "width": w, "height": h, "mode": MODE, "name": BRAND.get("name", ""),
            **{k: BRAND[k] for k in ("palette", "card", "plate", "motion", "backdrop", "filmLook", "ground", "endCard") if k in BRAND},
+           # the film's own end-card line wins over the sender's (film.json "endCard")
+           **({"endCard": {**BRAND.get("endCard", {}), **FILM["endCard"]}} if FILM.get("endCard") else {}),
            "fonts": {**fonts, "faces": faces}, "logo": logo}
     dst = ROOT / "video/src/timeline/brand.json"
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -230,7 +232,7 @@ def main():
         pconf = PARTS.get(part, {})
         img = f"img/film-{s['id']}.jpg"
         out.append({
-            "id": s["id"], "name": s["name"], "part": part, "kicker": pconf.get("kicker", part),
+            "id": s["id"], "name": s["name"], "part": part, "kicker": FILM["kicker"] if "kicker" in FILM else pconf.get("kicker", part),
             # a part without its own bed gets the film's loop (film.json "bed", set by the app's music choice)
             "title": s["title"], "bed": (lambda b: b if b in music else None)(pconf.get("bed", FILM.get("bed"))),
             "from": frame, "durationInFrames": total, "lead": lead,

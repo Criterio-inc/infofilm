@@ -92,6 +92,7 @@ export function listProfiles() {
         palette: { band: p.palette?.band, primary: p.palette?.primary, accent: p.palette?.accent, surface: p.palette?.surfaceLight, backdrop: p.palette?.backdrop },
         placeholder: /PLACEHOLDER/i.test(p._doc || ""),
         designSystems: (p.designSystems || []).length,
+        endLine: p.endCard?.line || "",
         ...(() => {
           const loops = musicLoops(path.join(root, name, "music"), { profile: true });
           return { loops: loops.map(({ key, label }) => ({ key, label })), loop: defaultLoop(p, loops) };
@@ -354,6 +355,8 @@ export function writeBrief(dir, b) {
     `- **Kanal:** ${b.channel || ""}`,
     `- **Längd:** ${b.length || ""}`,
     `- **Syfte / det tittaren ska ta med sig:** ${b.purpose || ""}`,
+    `- **Stämning:** ${b.moodText || ""}`,
+    ...(b.approver ? [`- **Godkänner filmen:** ${b.approver}`] : []),
     "",
     "## Underlag och övrigt",
     "",

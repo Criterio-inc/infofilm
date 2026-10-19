@@ -25,6 +25,7 @@ const SYSTEM = (dir) => `You are running headless from the Infofilm app on the u
 - You cannot ask questions while you work. When something is the user's decision (a ⛔ gate in the skill, a fact you cannot verify, a missing brand asset), finish what you can and end with the question; the user answers in the app.
 - Never run the paid steps (voice/narrate.py, voice/design_voice.py, art/gen.py, Suno), not even with --dry-run: the user estimates, approves and runs them with the app's buttons.
 - Free tools are fine: tools/build_timeline.py, cues.py, lint_cues.py, sync_art.py, node tools/stills.mjs and review.mjs, npx tsc.
+- The sender (brand/: profile.json, NOTES.md) is the frame every film shares: its look and its tone never change. The film's mood (film.json "mood": saklig, varm, inspirerande, lekfull, allvarlig, or the user's own words) colours this film within that frame: tempo, wording, jokes or none, picture prompts and music. Follow both.
 - Before writing the script, the image prompts (art/shots.json) or the scenes, read the linked design systems so the film follows them: tokens are already in the profile, but the design system also sets the tone, the layout and the picture language.
 ${DESIGN}
 - The app guides the user through five steps, and these are its only buttons: Manus ("Skriv manuset", "Manuset är klart"), Röst ("Gör tre röstprov", "Läs in rösten"), Bilder ("Beskriv bilderna", "Skapa bilderna", "Gör om"), Titta igenom ("Bygg scenerna", "Gör en snabbversion", "Ser bra ut", and the background-music choice) and Leverera ("Gör de färdiga filmerna"). Name only these; never "Rendera" or "Vad kostar det?".
@@ -38,6 +39,7 @@ const ALLOWED_PROFILE = () => [
 ];
 
 const SYSTEM_PROFILE = (dir) => `You are running headless from the Infofilm app on the user's computer, in the client profile folder ${dir} of the infofilm skill (${SKILL_DIR}: read profiles/README.md and references/style.md, and look at profiles/_mall and profiles/newsreel as examples).
+- A profile is the sender's frame, shared by every film: look and tone only. Never ask about a single film (its topic, audience, mood, length, formats, end-card line, deadlines or who approves it); each film asks those itself.
 - The profile decides how every film for this client looks and sounds: profile.json (palette by role, fonts, logo, card, motion, end card), style.json (the illustration style and its never-list), design.json (the narrator brief, in English, for ElevenLabs Voice Design) and NOTES.md (tone of voice, address, words, approvals, allowed services).
 - The client's material is in material/ (brand manual PDFs, logos, example images, presentations) and material/LINKS.md (websites). Read all of it. Take colours, fonts and the logo from it; never invent a brand value. What the material does not settle goes, as a question, at the end of NOTES.md and of your answer.
 - When profile.json lists "designSystems", read them before anything else and sync their tokens into profile.json; the design system wins over the material, and a conflict goes in NOTES.md.
