@@ -1,67 +1,63 @@
-# infofilm
+# infofilm – kundklipp och förklarfilmer
 
-[![Support me on Patreon](https://img.shields.io/badge/Patreon-Support%20my%20work-FF424D?style=flat&logo=patreon&logoColor=white)](https://www.patreon.com/AndersBjarby)
+En Claude Code-**skill** för berättade infografikfilmer i kundens egen grafiska profil:
+- **klipp** på 30–90 sekunder med ett budskap, för LinkedIn, webb, intranät och möten
+- **filmer** på 2–15 minuter i flera delar.
 
-A Claude Code **skill** for making narrated **infographic explainer films**: 5–15 minutes on how a system works, what happened and what happens next. They are told as a 1950s newsreel of instructional cards, with a silent mascot, a far-too-cheerful narrator, sung commercial breaks, and code-drawn infographics that land on the exact spoken word.
+Formaten är 16:9 och 1:1, och samma projekt renderar båda. Siffror, rubriker och etiketter ritas i kod och landar på exakt det ord som berättarrösten säger.
 
-![The template's golden scene "One year": a day counter with decimals snapping on, an orbit and a quarter-day pie](docs/the-year.jpg)
-
-The skill was extracted from a real 13-minute production about a national election. It packages the whole pipeline, the template that renders and the lessons learned the hard way:
+Detta är en fork av [fltman/infofilm](https://github.com/fltman/infofilm) av Anders Bjarby. Originalets 1950-talsjournal finns kvar som profilen `newsreel`.
 
 ```
-research → fact-checked script → narrator (ElevenLabs, per-character timestamps)
-         → theme, beds and jingles (Suno) → illustrations (Gemini 3 Pro Image)
-         → Remotion scenes cued to words → −14 LUFS master + SRT
+kundprofil → research → faktagranskat manus → berättarröst (ElevenLabs, tidskodad per tecken)
+           → musik (Suno) → illustrationer (Gemini) → Remotion-scener på orden → −14 LUFS + SRT
 ```
 
-## Why it works
-- **Code draws everything that must be true.** Every number, title and label is rendered from a fact base (`data.ts` ← `notes/research.md` ← primary sources). The image model only supplies mood, setting and the mascot, and every prompt forbids text.
-- **The animation is timed to speech, not to frames.** Scenes say `cue("three hundred and sixty-five")` and get the frame where the narrator says it. Before any narration exists, the timings are estimated from the text, so the whole film can be built and reviewed for free. When the voice arrives, the cues move by themselves.
-- **The film always plays.** A scene without a component renders as its card, a scene without a picture gets a drawn ground, and a scene without a voice gets estimated timing. You can watch the whole film at every stage.
-- **Money is gated.** Narration, images and music downloads each have a `--dry-run` that prints the cost, and the skill asks before spending. The narration cache is content-addressed per paragraph, so editing one scene re-bills one scene.
+## Så funkar det
+- **En profil per kund** (`skills/infofilm/profiles/<kund>/`). Den innehåller färger (som roller), typsnitt, logga, kortform, rörelse, bildstil, berättarröst, återanvändbar musik och `NOTES.md` med tonalitet och regler. Den görs en gång och återanvänds i varje film. `criterio` är standard.
+- **Två lägen.** `klipp` består av en krok, 1–3 scener och ett slutkort med logga. `film` består av delar.
+- **Flera format i ett projekt.** Scenerna lägger ut sig efter fönstrets form. `tools/render.sh` levererar `<namn>.mp4` och `<namn>-1x1.mp4`.
+- **Kod ritar allt som måste stämma.** Varje siffra kommer från `data.ts` ← `notes/research.md` ← primärkällor. Bildmodellen står bara för miljö och stämning, och bilderna innehåller aldrig text.
+- **Filmen spelar alltid.** Scener utan komponent visas som kort, och scener utan röst får uppskattad tajming. Du kan alltså granska hela filmen innan något kostar pengar.
+- **Pengar kräver ett ja.** Röst, bilder och musik har `--dry-run` som visar kostnaden, och skillen frågar innan den spenderar.
 
-![The template's golden scene "The rule": three rules and three verdicts](docs/the-rule.jpg)
+## Kom igång
+```bash
+git clone https://github.com/Criterio-inc/infofilm.git
+cd infofilm && ./install.sh --link       # länkar skillen till ~/.claude/skills/infofilm
+```
+Be sedan Claude Code om ett klipp, till exempel *"gör ett 60-sekundersklipp till LinkedIn om … för Borås Stad"*. För hand ser det ut så här:
+```bash
+S=~/.claude/skills/infofilm/scripts
+$S/new_profile.sh boras-stad --name "Borås Stad"              # ny kund: fyll sedan i profile.json, logga, NOTES.md
+$S/new_film.sh ~/filmer/bs-budget --profile boras-stad --mode klipp --format 16:9,1:1 \
+               --slug bs-budget --title "Budgeten på en minut"
+cd ~/filmer/bs-budget/video && npx remotion studio src/index.ts  # förhandsgranska
+cd .. && tools/render.sh                                         # bs-budget.mp4 + bs-budget-1x1.mp4 + .srt
+```
+Kundmaterial som inte ska ligga i det här repot (anteckningar, licensierade typsnitt) kan ligga i en separat privat mapp eller ett separat repo. Peka ut den med `export INFOFILM_PROFILES=~/kundprofiler`.
 
-## What's inside
+## Innehåll
 ```
 skills/infofilm/
-├── SKILL.md                 # the pipeline: 10 phases, the gates, the standing rules
-├── references/
-│   ├── script.md            # research file, manuscript format, film structure, review
-│   ├── style.md             # the house look, the mascot, changing styles
-│   ├── voice.md             # Voice Design, test reading, narration with timestamps
-│   ├── music.md             # Suno web UI: theme in Speech mode, beds, jingles, WAV, aligned lyrics
-│   ├── images.md            # Gemini 21:9 2K, character reference, inspecting every image
-│   ├── scenes.md            # golden scenes, parallel builders, primitives, contact sheets
-│   ├── render.md            # render, loudness, verification, delivery
-│   └── pitfalls.md          # every trap that cost a round, with its fix
-├── scripts/new_film.sh      # scaffold a project from the template
-└── template/                # a complete, rendering film (1-minute demo about leap years)
-    ├── film.json            # title, language, locale, parts → kicker + music bed, scene music hooks
-    ├── script/script.md     # the manuscript
-    ├── notes/               # research.md (the fact base), log.md (decisions, approvals, costs)
-    ├── voice/               # design_voice.py, narrate.py (ElevenLabs, cached, timestamps)
-    ├── music/               # cuts.json, tools/beats.py, tools/suno_lines.py
-    ├── art/                 # style.json (the look + the never-list), shots.json, gen.py
-    ├── tools/               # build_timeline, cues, lint_cues, make_srt, sync_art, make_sfx, render.sh
-    └── video/               # Remotion 4: Card, Plate, Counter, Stamp, KineticLyrics, CommercialBreak …
+├── SKILL.md                 # pipelinen: profil, läge, format, faserna och grindarna
+├── profiles/                # criterio (standard), _mall (ny kund), newsreel (originalet) + README
+├── references/              # manus, stil, röst, musik, bilder, scener, rendering, fallgropar
+├── scripts/
+│   ├── new_film.sh          # nytt klipp eller ny film från mallen, i en kundprofil
+│   ├── new_profile.sh       # ny kundprofil från _mall
+│   └── apply_profile.py     # lägg in (eller byt) profil i ett projekt
+└── template/                # en komplett film som renderar (demo om skottår)
+    ├── film.json            # titel, språk, profil, läge, format, delar, musikkrokar
+    ├── brand/               # (skapas) kundprofilen → video/src/timeline/brand.json
+    ├── tools/               # build_timeline, fetch_fonts, cues, lint_cues, make_srt, render.sh …
+    └── video/               # Remotion 4: Card, EndCard, Plate, Counter, Stamp …
 ```
 
-## Install
-```bash
-git clone https://github.com/fltman/infofilm.git
-cd infofilm && ./install.sh          # or ./install.sh --link
-```
-Then ask Claude Code for a film, for example *"make a 10-minute explainer film about how the EU makes a law"*. To start a project by hand:
-```bash
-~/.claude/skills/infofilm/scripts/new_film.sh ~/films/eu-law --slug eu-law --title "How the EU Makes a Law" --lang en --locale en-GB
-cd ~/films/eu-law/video && npx remotion studio src/index.ts
-```
-
-## Requirements
-- Claude Code. For music, the [Claude in Chrome](https://claude.ai/chrome) extension and a [Suno](https://suno.com) account (the skill uses Suno's own web UI).
-- Node 20+ with pnpm or npm, Python 3.10+ with `numpy` and `elevenlabs`, and `ffmpeg`.
-- `ELEVENLABS_API_KEY` for narration and `OPENROUTER_API_KEY` for illustrations (Gemini 3 Pro Image).
+## Krav
+- Claude Code. För musik behövs tillägget [Claude in Chrome](https://claude.ai/chrome) och ett [Suno](https://suno.com)-konto.
+- Node 20+ med pnpm eller npm, Python 3.10+ med `numpy` och `elevenlabs`, samt `ffmpeg`.
+- `ELEVENLABS_API_KEY` för rösten och `OPENROUTER_API_KEY` för illustrationerna (Gemini 3 Pro Image).
 
 ## What a 12-minute film costs (measured)
 | Item | Volume | Cost |

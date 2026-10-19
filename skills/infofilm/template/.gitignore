@@ -4,3 +4,4 @@ node_modules/
 video/public/audio/
 video/public/music/
 .DS_Store
+video/public/brand/

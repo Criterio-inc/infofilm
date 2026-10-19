@@ -1,17 +1,19 @@
 import React from "react";
 import { AbsoluteFill, Img, interpolate, staticFile } from "remotion";
 import { ease, pop, prog } from "../anim";
-import { DISPLAY, UI } from "../fonts";
-import { C, CAPTION_H, CARD, TITLE_H, WIN } from "../theme";
+import { DISPLAY_FONT, DISPLAY_EM, DISPLAY_UPPER, UI } from "../fonts";
+import { BRAND, C, CAPTION_H, CAPTION_SIZE, CARD, PLATE, S, TITLE_H, WIN } from "../theme";
 import { useScene } from "../timing";
 
 export const ENTER = 18; // frames the card needs to land
 export const EXIT = 14; // frames the card needs to leave
 
 /**
- * The instructional card every scene is built on. Title band (code), picture window
+ * The card every scene is built on. Title band (code, with the client's logo), picture window
  * (AI illustration with a slow camera move + your overlays as children), caption band.
- * Children are positioned in WINDOW coordinates: 0..WIN.w × 0..WIN.h (1800×749).
+ * Children are positioned in WINDOW coordinates: 0..WIN.w × 0..WIN.h (1800×749 at 16:9).
+ * How it arrives and leaves is the profile's "motion": "deal" (dealt onto the table, flies out
+ * to the left) or "slide" (a calm slide and fade, for most clients).
  */
 export const Card: React.FC<{
   title?: string;
@@ -29,15 +31,23 @@ export const Card: React.FC<{
   const s = useScene();
   const f = s.frame;
   const d = s.durationInFrames;
-  const tin = pop(f, 0, { damping: 15, stiffness: 120, mass: 0.9 });
-  const tout = prog(f, d - EXIT, EXIT, ease.in);
-  const y = (1 - tin) * 1150;
-  const rot = (1 - tin) * 5 - tout * 7;
-  const x = -tout * 2200;
   const z = interpolate(f, [0, d], zoom);
+  const tout = prog(f, d - EXIT, EXIT, ease.in);
+  let move: React.CSSProperties;
+  if (BRAND.motion === "slide") {
+    const tin = prog(f, 0, ENTER, ease.out);
+    move = { transform: `translateX(${(1 - tin) * 140 - tout * 140}px)`, opacity: tin * (1 - tout) };
+  } else {
+    const tin = pop(f, 0, { damping: 15, stiffness: 120, mass: 0.9 });
+    move = { transform: `translate(${-tout * 2200}px, ${(1 - tin) * 1150}px) rotate(${(1 - tin) * 5 - tout * 7}deg)`, transformOrigin: "50% 100%" };
+  }
+  const shown = DISPLAY_UPPER ? (title ?? "").toUpperCase() : (title ?? "");
+  const logoH = BRAND.logo ? Math.round((BRAND.logo.height ?? 56) * S) : 0;
+  // the title shrinks so that title, kicker and logo keep one line
+  const titleRoom = CARD.w * 0.62 - (BRAND.logo ? logoH * 3 : 0);
 
   return (
-    <AbsoluteFill style={{ transform: `translate(${x}px, ${y}px) rotate(${rot}deg)`, transformOrigin: "50% 100%" }}>
+    <AbsoluteFill style={move}>
       <div
         style={{
           position: "absolute",
@@ -46,9 +56,9 @@ export const Card: React.FC<{
           width: CARD.w,
           height: CARD.h,
           borderRadius: CARD.radius,
-          background: C.paper,
+          background: C.surface,
           overflow: "hidden",
-          boxShadow: "0 24px 60px rgba(0,0,0,0.55), 0 4px 0 rgba(0,0,0,0.25)",
+          boxShadow: CARD.shadow,
         }}
       >
         {/* picture window */}
@@ -68,7 +78,7 @@ export const Card: React.FC<{
               }}
             />
           )}
-          {dim > 0 && <AbsoluteFill style={{ background: C.navyDeep, opacity: dim }} />}
+          {dim > 0 && <AbsoluteFill style={{ background: C.dim, opacity: dim }} />}
           <div style={{ position: "absolute", inset: 0 }}>{children}</div>
         </div>
         {/* title band */}
@@ -80,25 +90,36 @@ export const Card: React.FC<{
             width: CARD.w,
             height: TITLE_H,
             background: C.band,
-            borderBottom: `${CARD.border}px solid ${C.ink}`,
+            borderBottom: CARD.border ? `${CARD.border}px solid ${C.ink}` : undefined,
             display: "flex",
             alignItems: "center",
-            padding: "0 56px",
+            padding: `0 ${Math.round(56 * S)}px`,
             boxSizing: "border-box",
             justifyContent: "space-between",
+            gap: 24,
           }}
         >
           {titleNode ?? (
-            // Bowlby One SC caps run ~0.74 em per character; long titles shrink so the kicker keeps one line
-            <div style={{ fontFamily: DISPLAY, fontSize: Math.min(78, Math.floor(1120 / ((title ?? "").length * 0.74))), color: C.ink, lineHeight: 1, whiteSpace: "nowrap" }}>
-              {title}
+            <div
+              style={{
+                ...DISPLAY_FONT,
+                fontSize: Math.min(Math.round(78 * S), Math.floor(titleRoom / (Math.max(1, shown.length) * DISPLAY_EM))),
+                color: C.bandText,
+                lineHeight: 1,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {shown}
             </div>
           )}
-          {kicker && (
-            <div style={{ fontFamily: UI, fontWeight: 600, fontSize: 26, letterSpacing: "0.14em", color: C.navy, textTransform: "uppercase", whiteSpace: "nowrap" }}>
-              {kicker}
-            </div>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: Math.round(28 * S) }}>
+            {kicker && (
+              <div style={{ fontFamily: UI, fontWeight: 600, fontSize: Math.round(26 * S), letterSpacing: "0.14em", color: C.kicker, textTransform: "uppercase", whiteSpace: "nowrap" }}>
+                {kicker}
+              </div>
+            )}
+            {BRAND.logo && <Img src={staticFile(BRAND.logo.src)} style={{ height: logoH, width: "auto", display: "block" }} />}
+          </div>
         </div>
         {/* caption band */}
         <div
@@ -109,32 +130,50 @@ export const Card: React.FC<{
             width: CARD.w,
             height: CAPTION_H,
             background: C.band,
-            borderTop: `${CARD.border}px solid ${C.ink}`,
+            borderTop: CARD.border ? `${CARD.border}px solid ${C.ink}` : undefined,
             display: "flex",
             alignItems: "center",
-            padding: "0 56px",
+            padding: `0 ${Math.round(56 * S)}px`,
             boxSizing: "border-box",
             fontFamily: UI,
             fontWeight: 600,
-            fontSize: 38,
-            color: C.ink,
+            fontSize: CAPTION_SIZE,
+            color: C.bandText,
             whiteSpace: "nowrap",
           }}
         >
           {caption}
         </div>
         {/* ink border on top of everything */}
-        <div style={{ position: "absolute", inset: 0, borderRadius: CARD.radius, border: `${CARD.border}px solid ${C.ink}`, pointerEvents: "none" }} />
+        {CARD.border > 0 && (
+          <div style={{ position: "absolute", inset: 0, borderRadius: CARD.radius, border: `${CARD.border}px solid ${C.ink}`, pointerEvents: "none" }} />
+        )}
       </div>
     </AbsoluteFill>
   );
 };
 
-/** Stand-in for a missing illustration: halftone dots and a googie starburst on paper. */
-const Ground: React.FC<{ zoom: number; focus: [number, number] }> = ({ zoom, focus }) => (
+/** Stand-in for a missing illustration. Newsreel: halftone dots and a googie starburst on paper;
+ * profile "ground": "soft": a calm gradient with a few large circles in the brand colours. */
+const Ground: React.FC<{ zoom: number; focus: [number, number] }> = ({ zoom, focus }) =>
+  BRAND.ground === "soft" ? (
+    <AbsoluteFill
+      style={{
+        background: `radial-gradient(ellipse at 30% 35%, ${C.surfaceLight} 0%, ${C.surface} 55%, ${C.surfaceDark} 100%)`,
+        transform: `scale(${zoom})`,
+        transformOrigin: `${focus[0] * 100}% ${focus[1] * 100}%`,
+      }}
+    >
+      <svg width={WIN.w} height={WIN.h} style={{ position: "absolute" }}>
+        <circle cx={WIN.w * 0.82} cy={WIN.h * 0.2} r={WIN.h * 0.42} fill={C.accent} opacity={0.12} />
+        <circle cx={WIN.w * 0.1} cy={WIN.h * 0.95} r={WIN.h * 0.36} fill={C.primary} opacity={0.08} />
+        <circle cx={WIN.w * 0.6} cy={WIN.h * 0.9} r={WIN.h * 0.14} fill={C.highlight} opacity={0.14} />
+      </svg>
+    </AbsoluteFill>
+  ) : (
   <AbsoluteFill
     style={{
-      background: `radial-gradient(circle, ${C.ochre}40 26%, transparent 28%) 0 0 / 26px 26px, radial-gradient(ellipse at 50% 45%, ${C.paperLight} 0%, ${C.paperDark} 100%)`,
+      background: `radial-gradient(circle, ${C.accentDark}40 26%, transparent 28%) 0 0 / 26px 26px, radial-gradient(ellipse at 50% 45%, ${C.surfaceLight} 0%, ${C.surfaceDark} 100%)`,
       transform: `scale(${zoom})`,
       transformOrigin: `${focus[0] * 100}% ${focus[1] * 100}%`,
     }}
@@ -142,13 +181,13 @@ const Ground: React.FC<{ zoom: number; focus: [number, number] }> = ({ zoom, foc
     <svg width={WIN.w} height={WIN.h} style={{ position: "absolute", opacity: 0.22 }}>
       {Array.from({ length: 24 }, (_, i) => {
         const a = (Math.PI * 2 * i) / 24;
-        return <line key={i} x1={WIN.w / 2} y1={WIN.h / 2} x2={WIN.w / 2 + Math.cos(a) * 1200} y2={WIN.h / 2 + Math.sin(a) * 1200} stroke={C.gold} strokeWidth={i % 2 ? 10 : 26} />;
+        return <line key={i} x1={WIN.w / 2} y1={WIN.h / 2} x2={WIN.w / 2 + Math.cos(a) * 1200} y2={WIN.h / 2 + Math.sin(a) * 1200} stroke={C.accent} strokeWidth={i % 2 ? 10 : 26} />;
       })}
     </svg>
   </AbsoluteFill>
-);
+  );
 
-/** A paper plate inside the window for infographics: cream panel with ink border. */
+/** A plate inside the window for infographics: a light panel (newsreel: cream with an ink border). */
 export const Plate: React.FC<{ x: number; y: number; w: number; h: number; style?: React.CSSProperties; children?: React.ReactNode }> = ({
   x,
   y,
@@ -164,10 +203,10 @@ export const Plate: React.FC<{ x: number; y: number; w: number; h: number; style
       top: y,
       width: w,
       height: h,
-      background: C.paperLight,
-      border: `4px solid ${C.ink}`,
-      borderRadius: 18,
-      boxShadow: "0 10px 0 rgba(18,22,23,0.25)",
+      background: C.surfaceLight,
+      border: PLATE.border ? `${PLATE.border}px solid ${C.ink}` : undefined,
+      borderRadius: PLATE.radius,
+      boxShadow: PLATE.shadow,
       overflow: "hidden",
       ...style,
     }}

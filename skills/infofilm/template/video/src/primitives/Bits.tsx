@@ -1,7 +1,7 @@
 import React from "react";
 import { Audio, Sequence, staticFile } from "remotion";
 import { count, pop, prog } from "../anim";
-import { DISPLAY, UI } from "../fonts";
+import { DISPLAY_FONT, UI } from "../fonts";
 import { C, LOCALE } from "../theme";
 import { useScene } from "../timing";
 import { SFX } from "../sfx";
@@ -41,7 +41,7 @@ export const Stamp: React.FC<{
   color?: string;
   bg?: string;
   sound?: boolean;
-}> = ({ at, x, y, text, size = 64, rotate = -6, color = C.navy, bg = C.paperLight, sound = true }) => {
+}> = ({ at, x, y, text, size = 64, rotate = -6, color = C.primary, bg = C.surfaceLight, sound = true }) => {
   const { frame } = useScene();
   if (frame < at) return null;
   const t = pop(frame, at, { damping: 11, stiffness: 260, mass: 0.6 });
@@ -59,7 +59,7 @@ export const Stamp: React.FC<{
           border: `5px solid ${C.ink}`,
           borderRadius: 14,
           padding: `${size * 0.16}px ${size * 0.42}px`,
-          fontFamily: DISPLAY,
+          ...DISPLAY_FONT,
           fontSize: size,
           lineHeight: 1.05,
           color,
@@ -119,9 +119,9 @@ export const Token: React.FC<{ label: string; color: string; size?: number; styl
       border: `${Math.max(3, size * 0.045)}px solid ${C.ink}`,
       display: "grid",
       placeItems: "center",
-      fontFamily: DISPLAY,
+      ...DISPLAY_FONT,
       fontSize: size * (label.length > 1 ? 0.3 : 0.4),
-      color: C.paperLight,
+      color: C.surfaceLight,
       textShadow: "0 2px 0 rgba(0,0,0,0.35)",
       boxSizing: "border-box",
       ...style,

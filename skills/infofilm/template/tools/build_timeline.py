@@ -12,15 +12,20 @@ film.json "parts" gives each part its kicker and music bed; film.json "scenes" g
 opening theme ("intro") or a jingle after its speech ("after"). Music cut points come from
 music/cuts.json; the files are copied to video/public/music/. Illustrations are picked up from
 video/public/img/film-<Sxx>.jpg (tools/sync_art.py puts them there).
+
+It also writes video/src/timeline/brand.json from the client profile in brand/ (palette, fonts,
+card, motion, logo) and the format (film.json "formats", or FORMAT=1:1 for this run), and copies
+the logo and font files to video/public/brand/.
 """
 import json
 import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from film import FILM, FPS, ROOT  # noqa: E402
+from film import BRAND, BRAND_DIR, FILM, FORMAT, FPS, MODE, ROOT, SIZES  # noqa: E402
 from script_parse import parse  # noqa: E402
 
 EST_WPM = FILM.get("estWpm", 130)  # replace with the measured median once the narration exists
@@ -93,7 +98,53 @@ def copy_audio(src, dst):
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", str(src), "-ar", "48000", "-b:a", "192k", str(dst)], check=True)
 
 
+def copy_file(src, dst):
+    if dst.exists() and dst.stat().st_mtime >= src.stat().st_mtime:
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+
+
+def build_brand():
+    """brand/profile.json + the format → video/src/timeline/brand.json; logo and fonts → public/brand/."""
+    if not BRAND:
+        sys.exit("brand/profile.json is missing: copy a profile in (scripts/new_film.sh --profile does this)")
+    if FORMAT not in SIZES:
+        sys.exit(f"unknown format {FORMAT}: use one of {', '.join(SIZES)}")
+    pub = ROOT / "video/public/brand"
+    faces = []
+    gfile = BRAND_DIR / "fonts/google.json"
+    if gfile.exists():
+        faces += json.loads(gfile.read_text(encoding="utf-8"))
+    fonts = {}
+    for role, spec in BRAND.get("fonts", {}).items():
+        for f in spec.get("files", []):
+            faces.append({"family": spec["family"], "weight": f.get("weight", 400), "style": f.get("style", "normal"), "file": f["file"]})
+        fonts[role] = {k: v for k, v in spec.items() if k not in ("files", "google", "weights")}
+        # the weight titles and numbers are set in: "weight", else the heaviest one the profile loads
+        fonts[role]["weight"] = spec.get("weight") or max(spec.get("weights") or [f.get("weight", 400) for f in spec.get("files", [])] or [400])
+    for face in faces:
+        src = BRAND_DIR / face["file"]
+        if not src.exists():
+            sys.exit(f"font file {src.relative_to(ROOT)} is missing (run python3 tools/fetch_fonts.py)")
+        copy_file(src, pub / face["file"])
+        face["src"] = "brand/" + face.pop("file")
+    logo = BRAND.get("logo") or None
+    if logo:
+        copy_file(BRAND_DIR / logo["file"], pub / logo["file"])
+        logo = {**logo, "src": "brand/" + logo["file"]}
+    w, h = SIZES[FORMAT]
+    out = {"format": FORMAT, "width": w, "height": h, "mode": MODE, "name": BRAND.get("name", ""),
+           **{k: BRAND[k] for k in ("palette", "card", "plate", "motion", "backdrop", "filmLook", "ground", "endCard") if k in BRAND},
+           "fonts": {**fonts, "faces": faces}, "logo": logo}
+    dst = ROOT / "video/src/timeline/brand.json"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
+    return f"{BRAND.get('name', '?')}, {FORMAT} {w}×{h}"
+
+
 def main():
+    brand = build_brand()
     _, scenes = parse()
     pub = ROOT / "video/public"
     music = {}
@@ -159,7 +210,7 @@ def main():
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(json.dumps(tl, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"{dst.relative_to(ROOT)}: {len(out)} scenes, {frame} frames = {frame / FPS / 60:.1f} min "
-          f"({n_real} narrated, {len(out) - n_real} estimated, {sum(1 for o in out if o['img'])} with an illustration)")
+          f"({n_real} narrated, {len(out) - n_real} estimated, {sum(1 for o in out if o['img'])} with an illustration) · {brand}")
 
 
 if __name__ == "__main__":

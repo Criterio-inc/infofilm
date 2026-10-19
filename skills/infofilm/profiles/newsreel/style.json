@@ -6,7 +6,7 @@
   "style_only": "Match the drawing style of the attached image exactly: the same thick ink lines, flat cream, navy and golden-yellow palette and halftone shading. Take only the drawing style from it: not its character, not its paper sheet, worn edges or layout. ",
   "ink": "Mid-century cartoon style: thick confident black ink outlines, flat limited palette of cream, navy blue and golden yellow with occasional signal red accents, halftone dot shading, a subtle aged-paper grain across the whole picture. The world is 1950s retro-futurism, the future as imagined in 1957: atomic-age optimism, googie architecture, chrome, boomerang and starburst shapes, rockets, monorails, flying cars and friendly robots.",
   "kinds": {
-    "film": "A wide 21:9 full-bleed illustration that fills the entire image edge to edge, right up to all four edges: no paper sheet, no worn or torn paper edges, no rounded corners, no card border, no frame, no vignette. Keep heads, hats and key objects well inside the frame with breathing room above and below.",
+    "film": "A wide full-bleed illustration that fills the entire image edge to edge, right up to all four edges: no paper sheet, no worn or torn paper edges, no rounded corners, no card border, no frame, no vignette. Keep heads, hats and key objects well inside the frame with breathing room above and below.",
     "sheet": "Laid out as a clean animation model sheet on cream paper.",
     "scene": "A full-bleed illustration that fills the entire image edge to edge: no border, no frame.",
     "ref": "A single full-body character portrait, front three-quarter view, standing, on plain cream paper."

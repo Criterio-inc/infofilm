@@ -14,8 +14,10 @@
 | A scene's audio is silent after an edit | The narration is for the old text | `build_timeline.py` prints "older text"; re-narrate that scene |
 | The image model writes words ("WHOOSH", "1957", "BALLOT") | Models add text | Explicit "no text" in every prompt, plus inspecting every image |
 | The mascot has two hats | Image-to-image doubles props | Inspect; regenerate; re-measure positions laid over the picture |
-| The hat and head are cut off in the card | 16:9 image in a 2.4:1 window | Generate 21:9 with headroom |
-| The kicker wraps to two lines | A long title | The card auto-shrinks titles (about 0.74 em per Bowlby character); keep titles at most 5 words |
+| The hat and head are cut off in the card | The image's shape does not match the window | Set film.json `formats` before generating (gen.py then picks 21:9, 5:4 or 16:9), with headroom |
+| The kicker wraps to two lines | A long title | The card auto-shrinks titles (profile `fonts.display.widthEm`: about 0.74 for Bowlby, 0.6 for Inter); keep titles at most 5 words |
+| A scene looks right in 16:9 and spills out in 1:1 | Fixed coordinates sized for 1800×749 | Lay out from `WIN` and branch on `WIDE`, like the golden scenes; check stills with `FORMAT=1:1` |
+| Fonts fall back to a system font | The font files are missing, or the Google fonts were never fetched | `python3 tools/fetch_fonts.py`, then rebuild the timeline; the console shows `[font-missing]` |
 | A label hides behind bars, a decimal is clipped | The plate is too narrow for the content at full size | Check the final state of every number in the sheet; plates clip with overflow hidden |
 | The fact base itself was wrong | Research from secondary summaries | An independent review against primary sources, covering the research as well as the script |
 | A date-bound phrase ("on Monday") aged within a week | Writing from the calendar | Use absolute dates, or structure that doesn't need them |

@@ -1,0 +1,39 @@
+{
+  "_doc": "A profile is the look and sound one client (or one house style) keeps across every film. See profiles/README.md.",
+  "name": "Newsreel (the original house style)",
+  "language": "en",
+  "locale": "en-US",
+  "kicker": "The Journal",
+  "palette": {
+    "backdrop": "#1a2839",
+    "backdropLight": "#2c4462",
+    "surfaceLight": "#fceed2",
+    "surface": "#f6e1bd",
+    "surfaceDark": "#ebd2a8",
+    "band": "#edc884",
+    "bandText": "#121617",
+    "kicker": "#253850",
+    "ink": "#121617",
+    "primary": "#253850",
+    "accent": "#dca844",
+    "accentDark": "#cf973b",
+    "signal": "#e2432e",
+    "positive": "#569445",
+    "highlight": "#e8c13a",
+    "dim": "#1a2839",
+    "faint": "rgba(18,22,23,0.55)"
+  },
+  "fonts": {
+    "display": {"family": "Bowlby One SC", "google": true, "weights": [400], "uppercase": true, "widthEm": 0.74},
+    "ui": {"family": "Jost", "google": true, "weights": [400, 600, 700]},
+    "script": {"family": "Lobster", "google": true, "weights": [400]}
+  },
+  "card": {"radius": 26, "border": 5, "shadow": "0 24px 60px rgba(0,0,0,0.55), 0 4px 0 rgba(0,0,0,0.25)"},
+  "plate": {"radius": 18, "border": 4, "shadow": "0 10px 0 rgba(18,22,23,0.25)"},
+  "motion": "deal",
+  "backdrop": "starbursts",
+  "filmLook": true,
+  "ground": "starburst",
+  "logo": null,
+  "endCard": {"line": "", "url": ""}
+}

@@ -2,14 +2,18 @@ import React from "react";
 import { interpolate } from "remotion";
 import { pop, prog } from "../anim";
 import { EXAMPLES, isLeap } from "../data";
-import { DISPLAY, UI } from "../fonts";
+import { DISPLAY_FONT, UI } from "../fonts";
 import { Captions, Card, Plate } from "../primitives/Card";
 import { Sfx, Stamp } from "../primitives/Bits";
-import { C } from "../theme";
+import { C, WIDE } from "../theme";
 import { useScene } from "../timing";
 
 const CL = { extrapolateLeft: "clamp", extrapolateRight: "clamp" } as const;
-const COL = [60, 650, 1240]; // three columns, 500 wide, 90 apart
+// three columns at 16:9 (500 wide, 90 apart) and at 1:1 / 9:16 (300 wide, 30 apart)
+const L = WIDE
+  ? { col: [60, 650, 1240], w: 500, ry: 34, rh: 270, big: 110, label: 40, sub: 30, yy: 360, yw: 420, yh: 300, year: 120, verdict: 38, stamp: [400, 318], stampSize: 40 }
+  : { col: [30, 360, 690], w: 300, ry: 40, rh: 260, big: 72, label: 26, sub: 22, yy: 360, yw: 270, yh: 300, year: 78, verdict: 24, stamp: [180, 312], stampSize: 30 };
+const COL = L.col;
 
 /** GOLDEN SCENE. S03 · the-rule — three rules on top, three years below; each verdict lands on its year. */
 export const TheRule: React.FC = () => {
@@ -53,11 +57,11 @@ export const TheRule: React.FC = () => {
         const later = rules.slice(i + 1).some((n) => f >= n.at);
         return (
           <div key={i} style={{ opacity: t * (later ? 0.55 : 1), transform: `translateY(${(1 - t) * 60}px)` }}>
-            <Plate x={COL[i]} y={34} w={500} h={270}>
+            <Plate x={COL[i]} y={L.ry} w={L.w} h={L.rh}>
               <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ fontFamily: DISPLAY, fontSize: 110, color: C.ink, lineHeight: 1 }}>{r.big}</div>
-                <div style={{ fontFamily: UI, fontWeight: 700, fontSize: 40, color: C.navy, marginTop: 8 }}>{r.label}</div>
-                <div style={{ fontFamily: UI, fontWeight: 600, fontSize: 30, color: C.faint, height: 36 }}>{r.sub}</div>
+                <div style={{ ...DISPLAY_FONT, fontSize: L.big, color: C.ink, lineHeight: 1 }}>{r.big}</div>
+                <div style={{ fontFamily: UI, fontWeight: 700, fontSize: L.label, color: C.primary, marginTop: 8 }}>{r.label}</div>
+                <div style={{ fontFamily: UI, fontWeight: 600, fontSize: L.sub, color: C.faint, height: L.sub * 1.2 }}>{r.sub}</div>
               </div>
             </Plate>
           </div>
@@ -70,8 +74,8 @@ export const TheRule: React.FC = () => {
         const leap = isLeap(y);
         return (
           <div key={y} style={{ opacity: t, transform: `translateY(${(1 - t) * 50}px)` }}>
-            <Plate x={COL[i] + 40} y={360} w={420} h={300} style={{ background: leap ? C.paperLight : C.paperDark }}>
-              <div style={{ position: "absolute", top: 40, width: "100%", textAlign: "center", fontFamily: DISPLAY, fontSize: 120, color: C.ink, lineHeight: 1 }}>{y}</div>
+            <Plate x={COL[i] + (L.w - L.yw) / 2} y={L.yy} w={L.yw} h={L.yh} style={{ background: leap ? C.surfaceLight : C.surfaceDark }}>
+              <div style={{ position: "absolute", top: 40, width: "100%", textAlign: "center", ...DISPLAY_FONT, fontSize: L.year, color: C.ink, lineHeight: 1 }}>{y}</div>
               {f >= at + 8 && (
                 <div
                   style={{
@@ -79,10 +83,10 @@ export const TheRule: React.FC = () => {
                     top: 200,
                     width: "100%",
                     textAlign: "center",
-                    fontFamily: DISPLAY,
-                    fontSize: 38,
+                    ...DISPLAY_FONT,
+                    fontSize: L.verdict,
                     whiteSpace: "nowrap",
-                    color: leap ? C.navy : C.red,
+                    color: leap ? C.primary : C.signal,
                     transform: `scale(${v}) rotate(${leap ? -4 : 4}deg)`,
                   }}
                 >
@@ -95,7 +99,7 @@ export const TheRule: React.FC = () => {
         );
       })}
       {/* the stamp sits on the first rule's corner: that rule is the one that overshoots */}
-      <Stamp at={tOver} x={400} y={318} text="OVERSHOOTS" size={40} rotate={-5} />
+      <Stamp at={tOver} x={L.stamp[0]} y={L.stamp[1]} text="OVERSHOOTS" size={L.stampSize} rotate={-5} />
     </Card>
   );
 };

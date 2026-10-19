@@ -62,7 +62,7 @@ export const Hemicycle: React.FC<{
   neutral?: string;
   dimFrom?: number;
   style?: React.CSSProperties;
-}> = ({ width, total: TOTAL = 349, shown = TOTAL, colors = [], neutral = C.paperDark, dimFrom, style }) => {
+}> = ({ width, total: TOTAL = 349, shown = TOTAL, colors = [], neutral = C.surfaceDark, dimFrom, style }) => {
   const layout = layoutFor(TOTAL);
   const R = width / 2;
   const h = R + R * layout.spacing;

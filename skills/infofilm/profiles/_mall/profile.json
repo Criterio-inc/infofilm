@@ -1,0 +1,39 @@
+{
+  "_doc": "Starting point for a client profile: copy it with scripts/new_profile.sh, then put in the client's colours, fonts and logo from their brand guidelines. See profiles/README.md.",
+  "name": "Kundnamn",
+  "language": "sv",
+  "locale": "sv-SE",
+  "kicker": "Kundnamn",
+  "palette": {
+    "backdrop": "#e9edf2",
+    "backdropLight": "#f6f8fa",
+    "surfaceLight": "#ffffff",
+    "surface": "#f7f8fa",
+    "surfaceDark": "#e3e7ec",
+    "band": "#0b3d5c",
+    "bandText": "#ffffff",
+    "kicker": "#bfe3f5",
+    "ink": "#14212b",
+    "primary": "#0b3d5c",
+    "accent": "#1e9bd7",
+    "accentDark": "#156f9c",
+    "signal": "#d4462f",
+    "positive": "#2e8b57",
+    "highlight": "#f2b705",
+    "dim": "#ffffff",
+    "faint": "rgba(20,33,43,0.6)"
+  },
+  "fonts": {
+    "display": {"family": "Inter", "google": true, "weights": [800], "uppercase": false, "widthEm": 0.6},
+    "ui": {"family": "Inter", "google": true, "weights": [400, 600, 700]},
+    "script": {"family": "Inter", "google": true, "weights": [800]}
+  },
+  "card": {"radius": 14, "border": 0, "shadow": "0 18px 50px rgba(20,33,43,0.18)"},
+  "plate": {"radius": 12, "border": 0, "shadow": "0 6px 24px rgba(20,33,43,0.14)"},
+  "motion": "slide",
+  "backdrop": "plain",
+  "filmLook": false,
+  "ground": "soft",
+  "logo": {"file": "logo.svg", "height": 56},
+  "endCard": {"line": "Vill du veta mer?", "url": "www.exempel.se"}
+}

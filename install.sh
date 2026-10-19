@@ -11,4 +11,5 @@ if [[ -e "$DST" || -L "$DST" ]]; then
 fi
 if [[ "${1:-}" == "--link" ]]; then ln -s "$SRC" "$DST"; else cp -R "$SRC" "$DST"; fi
 echo "installed: $DST"
-echo "new film:  $DST/scripts/new_film.sh ~/films/my-film --slug my-film --title \"My Film\" --lang en --locale en-US"
+echo "new clip:  $DST/scripts/new_film.sh ~/films/my-clip --mode klipp --format 16:9,1:1 --slug my-clip --title \"My Clip\""
+echo "new client: $DST/scripts/new_profile.sh my-client --name \"My Client\""

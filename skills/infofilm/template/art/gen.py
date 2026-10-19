@@ -8,10 +8,12 @@
 COSTS MONEY (about $0.14 per 2K image). Ask the user before a batch.
 
 A shot in art/shots.json is {"id", "prompt", "kind"?, "aspect"?, "ref"?, "character"?, "photos"?}:
-  kind    "film" (default: a scene illustration for the card window, 21:9), "sheet" (model/pose
+  kind    "film" (default: a scene illustration for the card window: 21:9 for a 16:9 film, 5:4 for
+          1:1, 3:4 for 9:16, 16:9 when the film is rendered in several formats), "sheet" (model/pose
           sheet, 16:9), "scene" (full-bleed 16:9), "ref" (the mascot reference itself, 1:1)
   ref     "character" (default: attach the mascot reference, keep him identical), "style" (attach
-          it only for the ink style, leave him out), "none" (text only — for the reference itself)
+          it only for the ink style, leave him out), "none" (text only — for the reference itself,
+          and the default when style.json has no "reference": a profile without a recurring character)
   photos  paths under art/ to real photographs of a real place or object (art/ref/*.jpg): attached
           after the mascot reference as a FORM reference, so towers, roofs and windows come out
           right. Record every photo's source and licence in art/ref/SOURCES.md.
@@ -31,8 +33,13 @@ HERE = Path(__file__).resolve().parent
 OUT = HERE / "img"
 STYLE = json.loads((HERE / "style.json").read_text(encoding="utf-8"))
 MODEL = STYLE.get("model", "google/gemini-3-pro-image")
-REF = HERE / STYLE.get("reference", "img/ref-mascot.png")
-ASPECT = {"film": "21:9", "sheet": "16:9", "scene": "16:9", "ref": "1:1"}
+REF = HERE / STYLE["reference"] if STYLE.get("reference") else None
+DEFAULT_REF = "character" if REF else "none"
+# the card window's shape decides the film picture: one format → its window, several → 16:9 (the
+# subject is kept central so both crops work)
+FORMATS = json.loads((HERE.parent / "film.json").read_text(encoding="utf-8")).get("formats", ["16:9"])
+FILM_ASPECT = {"16:9": "21:9", "1:1": "5:4", "9:16": "3:4"}[FORMATS[0]] if len(FORMATS) == 1 else "16:9"
+ASPECT = {"film": FILM_ASPECT, "sheet": "16:9", "scene": "16:9", "ref": "1:1"}
 COST = 0.14
 # the default form instruction for shots with "photos"; style.json can override it with "photos"
 PHOTOS = ("The attached photographs show the real place. Keep its architecture exactly as the photographs show it: "
@@ -53,7 +60,7 @@ def call(content, aspect):
 
 
 def prompt_for(shot):
-    kind, ref = shot.get("kind", "film"), shot.get("ref", "character")
+    kind, ref = shot.get("kind", "film"), shot.get("ref", DEFAULT_REF)
     lead = shot.get("character") or {"character": STYLE["character"], "style": STYLE["style_only"], "none": ""}[ref]
     if shot.get("photos"):
         if ref != "none":
@@ -70,8 +77,8 @@ def data_url(path):
 def generate(shot):
     out = OUT / f"{shot['id']}.png"
     content = [{"type": "text", "text": prompt_for(shot)}]
-    if shot.get("ref", "character") != "none":
-        if not REF.exists():
+    if shot.get("ref", DEFAULT_REF) != "none":
+        if not REF or not REF.exists():
             print(f"skip {shot['id']}: no reference image at {REF} — generate the kind 'ref' shot first")
             return 0
         content.append(data_url(REF))
