@@ -24,8 +24,14 @@ def client():
 
 
 def preview(tag):
-    res = client().text_to_voice.design(voice_description=D["description"], text=D["text"],
-                                        model_id=D.get("model", "eleven_ttv_v3"), output_format="mp3_44100_192")
+    design = lambda fmt: client().text_to_voice.design(voice_description=D["description"], text=D["text"],
+                                                       model_id=D.get("model", "eleven_ttv_v3"), output_format=fmt)
+    try:
+        res = design("mp3_44100_192")
+    except Exception as e:  # 192 kbps needs ElevenLabs' Creator tier
+        if "output_format_not_allowed" not in str(e):
+            raise
+        res = design("mp3_44100_128")
     out = HERE / "previews"
     out.mkdir(exist_ok=True)
     takes = []

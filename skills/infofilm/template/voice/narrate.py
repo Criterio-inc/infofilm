@@ -29,6 +29,7 @@ from script_parse import parse  # noqa: E402
 
 OUT = ROOT / "voice/scenes"
 TTS = {"model": "eleven_v4", "format": "mp3_44100_192", **FILM.get("tts", {})}
+FALLBACK_FORMAT = "mp3_44100_128"  # every ElevenLabs plan has it
 LANG = FILM.get("language")
 MAX_CHARS = 2000  # per API call
 
@@ -98,8 +99,17 @@ def main(argv):
                 kw = {"model_id": TTS["model"], "output_format": TTS["format"]}
                 if LANG:
                     kw["language_code"] = LANG
-                res = client.text_to_dialogue.convert_with_timestamps(
-                    inputs=[{"text": x, "voice_id": voice} for x in chunk], **kw)
+                try:
+                    res = client.text_to_dialogue.convert_with_timestamps(
+                        inputs=[{"text": x, "voice_id": voice} for x in chunk], **kw)
+                except Exception as e:
+                    # 192 kbps needs ElevenLabs' Creator tier: fall back to 128 kbps for the rest of the run
+                    if "output_format_not_allowed" not in str(e) or TTS["format"] == FALLBACK_FORMAT:
+                        raise
+                    print(f"  {TTS['format']} needs a higher ElevenLabs plan: using {FALLBACK_FORMAT}", flush=True)
+                    TTS["format"] = kw["output_format"] = FALLBACK_FORMAT
+                    res = client.text_to_dialogue.convert_with_timestamps(
+                        inputs=[{"text": x, "voice_id": voice} for x in chunk], **kw)
                 mp3.write_bytes(base64.b64decode(res.audio_base_64))
                 dump = lambda m: m.model_dump() if hasattr(m, "model_dump") else m.dict()
                 al.write_text(json.dumps({"alignment": dump(res.alignment)}, ensure_ascii=False))
