@@ -1,24 +1,25 @@
-# Kundnamn – profilanteckningar
+# Kundnamn – avsändarens tonalitet
 
-Läs den här filen innan du skriver manus eller bildprompter åt kunden.
+Ramen som alla filmer från den här avsändaren delar. Claude läser den före varje manus och bildbeskrivning. Det som gäller en enskild film, som ämne, målgrupp, stämning och vem som godkänner, står i filmens brief.
 
-## Kontakt och uppdrag
-- Beställare:
-- Godkänner manus:
-- Godkänner färdig film:
+## Vem avsändaren är
+- I en mening:
+- Målgrupper i stort:
 
-## Grafisk profil
-- Källa: (länk till kundens grafiska manual)
-- Färger: (namn och hex, och vilka som får användas till vad)
-- Typsnitt: (namn, och om de finns på Google Fonts eller levereras som filer i `fonts/`)
-- Logotyp: (vilken variant på mörk/ljus bakgrund, frizon, minsta storlek)
+## Så låter avsändaren
+- Tilltal: (du eller ni, formellt eller vardagligt)
+- Ton: (till exempel varm och saklig)
+- Ord vi använder:
+- Ord vi undviker:
+- Klarspråk: (krav, till exempel Språklagen för offentlig sektor)
 
-## Tonalitet
-- Tilltal: (du/ni, formellt/vardagligt)
-- Ord vi använder / undviker:
-- Klarspråk: (krav, t.ex. Språklagen för offentlig sektor)
+## Utseende
+- Källa: (länk till grafisk manual eller designsystem)
+- Färger, typsnitt och logga: (vad som gäller och var det kommer ifrån)
 
-## Regler
-- Tjänster som får användas för röst, musik och bild: (ElevenLabs, Suno, Gemini – godkänt av kunden?)
-- Tillgänglighet: undertexter (SRT) levereras alltid; textning inbränd? (ja/nej)
-- Annat:
+## Regler för alla filmer
+- Tjänster som får användas för röst, musik och bild: (ElevenLabs, Suno, Gemini)
+- Undertexter levereras alltid.
+
+## Aldrig
+- (sådant som aldrig får förekomma i ord eller bild)

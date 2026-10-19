@@ -154,3 +154,4 @@ details.tech > summary { color: var(--muted); }
 .sunobox { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
 .sunobox textarea, .sunobox input[readonly] { font-size: 13px; }
 dialog.ask p { white-space: pre-line; }
+.choice.moods { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }

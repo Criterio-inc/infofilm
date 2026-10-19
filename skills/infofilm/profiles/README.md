@@ -1,6 +1,6 @@
 # Profiles: one look and sound per client
 
-A profile holds everything a client keeps from film to film. `scripts/new_film.sh --profile <id>` puts it into a new project, so a new clip starts in the client's colours, type, logo, narrator and music.
+A profile is the sender's frame: everything a client keeps from film to film, its look and its tone. What one film is about, and how it should feel, belongs to the film: `film.json` "mood" (saklig, varm, inspirerande, lekfull, allvarlig, or own words), "endCard" (its own end-card line) and "kicker", set in the app's new-film guide. The same sender can make a sober film and a playful one. `scripts/new_film.sh --profile <id>` puts it into a new project, so a new clip starts in the client's colours, type, logo, narrator and music.
 
 | Profile | What |
 |---|---|

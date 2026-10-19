@@ -7,6 +7,7 @@ import net from "node:net";
 import path from "node:path";
 import { SKILL_DIR, toolEnv } from "./config.mjs";
 import { runningJob, startJob } from "./jobs.mjs";
+import { toTrash } from "./trash.mjs";
 import { designLinks, logLine, profileDir, projectDir, saveApp, writeBrief } from "./projects.mjs";
 import { claudeStep } from "./claude.mjs";
 import { loadConfig } from "./config.mjs";
@@ -178,11 +179,15 @@ export function createProject(b) {
       args: [],
       cwd: SKILL_DIR,
       after: () => {
-        writeBrief(dir, { ...b, designSystems });
-        if (designSystems.length) {
-          const f = path.join(dir, "film.json");
-          writeFileSync(f, JSON.stringify({ ...JSON.parse(readFileSync(f, "utf8")), designSystems }, null, 2) + "\n");
-        }
+        // the film's own choices: its mood, end-card line and kicker (the sender's are only a start)
+        const mood = String(b.moodOwn || "").trim() || String(b.mood || "saklig");
+        writeBrief(dir, { ...b, designSystems, moodText: mood });
+        const f = path.join(dir, "film.json");
+        const film = JSON.parse(readFileSync(f, "utf8"));
+        Object.assign(film, { mood }, designSystems.length ? { designSystems } : {});
+        if (typeof b.endLine === "string") film.endCard = { ...(film.endCard || {}), line: b.endLine.trim() };
+        if (String(b.kicker || "").trim()) film.kicker = String(b.kicker).trim();
+        writeFileSync(f, JSON.stringify(film, null, 2) + "\n");
         logLine(slug, `projektet skapat i appen (profil ${b.profile || "critero"}, ${b.mode === "film" ? "film" : "klipp"}, ${formats.join(", ") || "profilens format"})`);
       },
     },
@@ -206,12 +211,12 @@ export const PRESETS = {
   script: {
     label: "Research och manus",
     prompt:
-      "Läs brand/NOTES.md, notes/brief.md och de länkade designsystemen (designSystems i brand/profile.json och film.json). Gör fas 1 (research → notes/research.md, med primärkällor) och fas 3 (manus → script/script.md) enligt skillen, i projektets läge och längd. Ersätt demon helt, även data.ts där det behövs. Låt en oberoende subagent granska manus och research mot primärkällorna och åtgärda allt som är MUST. Kör sedan python3 tools/build_timeline.py. Avsluta med en kort sammanfattning av manuset och det jag behöver godkänna.",
+      "Läs brand/NOTES.md (avsändarens ram), notes/brief.md, filmens stämning (mood i film.json) och de länkade designsystemen (designSystems i brand/profile.json och film.json). Gör fas 1 (research → notes/research.md, med primärkällor) och fas 3 (manus → script/script.md) enligt skillen, i projektets läge och längd. Ersätt demon helt, även data.ts där det behövs. Låt en oberoende subagent granska manus och research mot primärkällorna och åtgärda allt som är MUST. Kör sedan python3 tools/build_timeline.py. Avsluta med en kort sammanfattning av manuset och det jag behöver godkänna.",
   },
   shots: {
     label: "Bildprompter",
     prompt:
-      "Skriv art/shots.json för filmens scener: en film-Sxx per scen (inte end-card), från scenens > visual:-rad, i profilens bildstil (art/style.json) och de länkade designsystemens bildspråk. Ta bort demons bilder ur shots.json. Behöver profilen en återkommande figur som saknas, föreslå det i stället för att lägga till den. Kör inte gen.py, det gör jag i appen.",
+      "Skriv art/shots.json för filmens scener: en film-Sxx per scen (inte end-card), från scenens > visual:-rad, i profilens bildstil (art/style.json), färgad av filmens stämning (mood i film.json), och de länkade designsystemens bildspråk. Ta bort demons bilder ur shots.json. Behöver profilen en återkommande figur som saknas, föreslå det i stället för att lägga till den. Kör inte gen.py, det gör jag i appen.",
   },
   scenes: {
     label: "Bygg scenerna",
@@ -221,7 +226,7 @@ export const PRESETS = {
   music: {
     label: "Musikprompt",
     prompt:
-      "Skriv en prompt till Suno för bakgrundsmusiken till den här filmen. Läs notes/brief.md, script/script.md, brand/NOTES.md (tonalitet, bildspråk och avsnittet Musik om det finns), film.json och de länkade designsystemen. Filmens längd i sekunder är durationInFrames delat med fps i video/src/timeline/master.json. Musiken ska ligga lågt under en berättarröst: instrumental, jämn, utan dramatiska höjningar, drops eller långt intro, och den ska gå att loopa. Anpassa stämning, tempo i BPM, instrument och energi efter filmens budskap, målgrupp och avsändare. Skriv JSON till music/suno-prompt.json med fälten title (kort, på svenska), styles (på engelska, kommaseparerade, högst 900 tecken), exclude (på engelska, kommaseparerade: alltid vocals och choir, plus det som skulle störa just den här filmen), lengthSeconds (filmens längd plus 10, avrundat), instrumental (true) och why (på svenska, en eller två meningar om varför musiken passar filmen). Ändra inget annat i projektet och kör inga betalda steg. Avsluta med en mening om stämningen du valde.",
+      "Skriv en prompt till Suno för bakgrundsmusiken till den här filmen. Utgå från filmens stämning (mood i film.json) inom avsändarens ram. Läs notes/brief.md, script/script.md, brand/NOTES.md (tonalitet, bildspråk och avsnittet Musik om det finns), film.json och de länkade designsystemen. Filmens längd i sekunder är durationInFrames delat med fps i video/src/timeline/master.json. Musiken ska ligga lågt under en berättarröst: instrumental, jämn, utan dramatiska höjningar, drops eller långt intro, och den ska gå att loopa. Anpassa stämning, tempo i BPM, instrument och energi efter filmens budskap, målgrupp och avsändare. Skriv JSON till music/suno-prompt.json med fälten title (kort, på svenska), styles (på engelska, kommaseparerade, högst 900 tecken), exclude (på engelska, kommaseparerade: alltid vocals och choir, plus det som skulle störa just den här filmen), lengthSeconds (filmens längd plus 10, avrundat), instrumental (true) och why (på svenska, en eller två meningar om varför musiken passar filmen). Ändra inget annat i projektet och kör inga betalda steg. Avsluta med en mening om stämningen du valde.",
   },
   review: {
     label: "Granska scenerna",
@@ -288,6 +293,16 @@ export function uploadAudio(id, { name, data }) {
   writeFileSync(cf, JSON.stringify(cuts, null, 2) + "\n");
   logLine(id, `eget ljud uppladdat i appen: ${name}`);
   return runAction(id, "music", { key });
+}
+
+/** A film to the wastebasket (Inställningar → Papperskorgen can restore it). */
+export function deleteProject(id) {
+  const dir = projectDir(id);
+  const busy = runningJob(id);
+  if (busy) throw Object.assign(new Error(`"${busy.title}" körs i filmen: avbryt det först`), { status: 409 });
+  stopStudio(id);
+  const film = JSON.parse(readFileSync(path.join(dir, "film.json"), "utf8"));
+  return toTrash("film", id, dir, film.title);
 }
 
 /** The user approves a step (the script, the preview); it counts until what it approved changes. */
