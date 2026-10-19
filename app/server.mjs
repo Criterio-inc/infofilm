@@ -34,12 +34,13 @@ async function getChecks(force = false) {
     run("python3", ["-c", "import elevenlabs; print('ok')"]),
   ]);
   const key = (k) => Boolean(secrets[k] || process.env[k]);
+  const where = Object.fromEntries(await Promise.all(["node", "python3", "ffmpeg", "claude"].map(async (t) => [t, await run("/bin/sh", ["-c", `command -v ${t}`])])));
   checks = [
-    { id: "node", label: "Node 20+", ok: Boolean(node && Number(node.replace(/^v/, "").split(".")[0]) >= 20), value: node, fix: "brew install node" },
-    { id: "python", label: "Python 3", ok: Boolean(python), value: python, fix: "brew install python" },
-    { id: "ffmpeg", label: "ffmpeg", ok: Boolean(ffmpeg), value: ffmpeg?.split(" ").slice(0, 3).join(" "), fix: "brew install ffmpeg" },
+    { id: "node", label: "Node 20+", ok: Boolean(node && Number(node.replace(/^v/, "").split(".")[0]) >= 20), value: node, fix: "brew install node", where: where["node"] },
+    { id: "python", label: "Python 3", ok: Boolean(python), value: python, fix: "brew install python", where: where["python3"] },
+    { id: "ffmpeg", label: "ffmpeg", ok: Boolean(ffmpeg), value: ffmpeg?.split(" ").slice(0, 3).join(" "), fix: "brew install ffmpeg", where: where["ffmpeg"] },
     { id: "numpy", label: "Python: numpy", ok: Boolean(numpy), value: numpy, fix: "kör app/macos/setup.sh" },
-    { id: "claude", label: "Claude Code", ok: Boolean(claude), value: claude, fix: "npm install -g @anthropic-ai/claude-code, logga sedan in med: claude" },
+    { id: "claude", label: "Claude Code", ok: Boolean(claude), value: claude, fix: "npm install -g @anthropic-ai/claude-code, logga sedan in med: claude", where: where["claude"] },
     { id: "elevenlabs", label: "Python: elevenlabs (för röst)", ok: Boolean(eleven), value: eleven && "installerat", fix: "kör app/macos/setup.sh" },
     { id: "eleven-key", label: "ElevenLabs-nyckel (för röst)", ok: key("ELEVENLABS_API_KEY"), fix: "lägg in under Inställningar" },
     { id: "openrouter-key", label: "OpenRouter-nyckel (för bilder)", ok: key("OPENROUTER_API_KEY"), fix: "lägg in under Inställningar" },
@@ -103,6 +104,7 @@ async function api(req, res, url) {
       profiles: listProfiles().map(({ dir, ...p }) => p),
       presets: Object.fromEntries(Object.entries(PRESETS).map(([k, v]) => [k, v.label])),
       platform: process.platform,
+      path: toolEnv().PATH,
     });
   }
   if (m === "GET" && parts[0] === "projects" && !parts[1]) {

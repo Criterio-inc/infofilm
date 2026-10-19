@@ -20,18 +20,28 @@ git clone https://github.com/Criterio-inc/infofilm.git ~/infofilm
 ~/infofilm/app/macos/setup.sh
 ```
 Skriptet gör följande:
-- installerar Node, Python och ffmpeg (via Homebrew)
+- installerar Xcodes kommandoradsverktyg, Node, Python och ffmpeg
 - lägger Python-paketen i `~/.infofilm/venv`
 - länkar skillen till `~/.claude/skills/infofilm`
 - installerar Claude Code om det saknas
-- bygger `~/Applications/Infofilm.app`.
+- bygger **Infofilm.app** i `~/Applications` och öppnar den.
 
-Dra sedan **Infofilm** till Dock. Logga in i Claude Code en gång med `claude` i Terminalen, och lägg in API-nycklarna under **Inställningar** i appen.
+Till sist skrivs en sammanfattning ut av vad som fungerar.
 
-Uppdatera med `cd ~/infofilm && git pull`. Flyttar du repot, kör `app/macos/make-app.sh` igen.
+Infofilm är en riktig Mac-app med eget fönster och egen ikon. Högerklicka på ikonen i Dock och välj **Alternativ → Behåll i Dock**. Logga in i Claude Code en gång med `claude` i Terminalen, och lägg in API-nycklarna under **Inställningar** i appen.
+
+Uppdatera så här:
+```bash
+cd ~/infofilm && git pull && app/macos/make-app.sh
+```
 
 ## Så fungerar det
-- `start.sh` startar servern (`node server.mjs`, port 4747, nås bara från den här datorn) om den inte redan körs. Sedan öppnas ett appfönster i Chrome, Edge eller Brave, och finns ingen av dem öppnas standardwebbläsaren. Servern fortsätter att köra när fönstret stängs. Avsluta den under **Inställningar → Avsluta appen**.
+- **Infofilm.app** (`macos/main.swift`) visar appen i ett eget fönster och kör `start.sh`, som startar servern (`node server.mjs`, port 4747, nås bara från den här datorn).
+  - Stänger du fönstret ligger appen kvar i Dock. Klicka på ikonen så kommer fönstret tillbaka.
+  - **⌘Q** avslutar appen och servern. Om en rendering pågår frågar appen först.
+  - Länkar och Remotion Studio öppnas i din vanliga webbläsare.
+  - Saknas Xcodes kommandoradsverktyg byggs i stället ett startskript, som öppnar appen i ett Chrome-fönster.
+- Ikonen ritas av `macos/make_icon.py` enligt Apples ikonrutnät.
 - Knapparna kör skillens egna verktyg i projektmappen (`tools/build_timeline.py`, `review.mjs`, `render.sh`, `voice/narrate.py`, `art/gen.py`). Loggen strömmas till rutan **Aktivitet**.
 - Claude körs som `claude -p` i projektmappen med skillen. Claude får läsa, skriva och köra skillens gratisverktyg, och får söka på webben. De betalda stegen är spärrade för Claude och görs bara med appens knappar efter ditt godkännande.
 - Filmerna hamnar i `~/Filmer`, eller i den mapp du väljer under **Inställningar**. Egna kundprofiler kan ligga i en separat mapp, som du också anger där.
