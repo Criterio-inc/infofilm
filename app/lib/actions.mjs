@@ -89,6 +89,19 @@ export function runAction(id, action, args = {}) {
       });
     }
 
+    case "preview": {
+      // a quick look at the whole film: the main format at half size, no loudness pass (free, a minute or two)
+      const out = path.join(dir, "out", "preview");
+      const browser = process.env.BROWSER_EXECUTABLE || loadConfig().browserExecutable;
+      return startJob(id, "Snabbförhandsvisning", [build(dir), {
+        label: "Förhandsvisning",
+        cmd: "npx",
+        args: ["remotion", "render", "src/index.ts", "Film", path.join(out, "preview.mp4"), "--scale=0.5", "--crf=26", "--concurrency=4", "--log=error", ...(browser ? [`--browser-executable=${browser}`] : [])],
+        cwd: path.join(dir, "video"),
+        parse: (l) => (/Detected differing memory|Memory reported|docker run|lower amount/.test(l) ? null : l),
+      }]);
+    }
+
     case "claude":
       return startJob(id, args.title || "Claude", [claudeStep(id, dir, args.prompt)], {
         onDone: (j) => saveApp(id, { claudeSession: j.data.session || null, claudeLast: { at: Date.now(), status: j.status, cost: j.data.cost ?? null, result: j.data.result ?? null } }),
@@ -209,6 +222,24 @@ export function stopStudio(id) {
 
 export const studioPort = (id) => studios.get(id)?.port ?? null;
 export const stopStudios = () => [...studios.keys()].forEach(stopStudio);
+
+/** The user approves a step (the script, the preview); it counts until what it approved changes. */
+export function approve(id, step) {
+  if (!["script", "review"].includes(step)) throw Object.assign(new Error("okänt steg"), { status: 400 });
+  const f = path.join(projectDir(id), ".infofilm-app.json");
+  const cur = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
+  saveApp(id, { approved: { ...(cur.approved || {}), [step]: Date.now() } });
+  logLine(id, `godkänt i appen: ${step === "script" ? "manuset" : "förhandsvisningen"}`);
+}
+
+/** Show one finished file selected in Finder. */
+export function revealFile(id, rel) {
+  if (!/^out\/[^/]+\.(mp4|srt)$/.test(rel || "")) throw Object.assign(new Error("kan inte visa den filen"), { status: 400 });
+  const f = path.join(projectDir(id), rel);
+  if (!existsSync(f)) throw Object.assign(new Error("filen finns inte"), { status: 404 });
+  if (process.platform === "darwin") spawn("open", ["-R", f], { stdio: "ignore", detached: true }).unref();
+  else spawn("xdg-open", [path.dirname(f)], { stdio: "ignore", detached: true }).unref();
+}
 
 /** Open a folder in Finder (macOS) or the file manager. */
 export function reveal(id, sub = "") {

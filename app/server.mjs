@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { createProject, PRESETS, reveal, runAction, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
+import { approve, createProject, PRESETS, reveal, revealFile, runAction, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
 import { APP_DIR, KEYS, SKILL_DIR, checkKey, loadConfig, loadSecrets, saveConfig, saveSecrets, toolEnv } from "./lib/config.mjs";
 import { getJob, projectJobs, runningJob, stopAll, stopJob, summary as jobSummary } from "./lib/jobs.mjs";
 import { detail, listProfiles, listProjects, projectDir, saveApp } from "./lib/projects.mjs";
@@ -15,7 +15,7 @@ import { startJob } from "./lib/jobs.mjs";
 const PORT = Number(process.env.INFOFILM_PORT || loadConfig().port || 4747);
 const PUBLIC = path.join(APP_DIR, "public");
 // files of a project the page may load: renders, stills, illustrations, narration, voice takes
-const SERVABLE = [/^out\/[^/]+\.(mp4|srt)$/, /^out\/stills-[^/]+\/review\/[^/]+_review\.jpg$/, /^video\/public\/img\/[^/]+\.jpg$/, /^video\/public\/audio\/[^/]+\.mp3$/, /^voice\/previews\/[^/]+\.mp3$/];
+const SERVABLE = [/^out\/[^/]+\.(mp4|srt)$/, /^out\/preview\/preview\.mp4$/, /^out\/stills-[^/]+\/review\/[^/]+_review\.jpg$/, /^video\/public\/img\/[^/]+\.jpg$/, /^video\/public\/audio\/[^/]+\.mp3$/, /^voice\/previews\/[^/]+\.mp3$/];
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".mp4": "video/mp4", ".mp3": "audio/mpeg", ".srt": "text/plain; charset=utf-8", ".json": "application/json" };
 
 // ── checks: what the computer has, cached for a minute ──
@@ -24,8 +24,17 @@ let checksAt = 0;
 const run = (cmd, args) =>
   new Promise((resolve) => execFile(cmd, args, { env: toolEnv(), timeout: 15000 }, (err, out, errOut) => resolve(err ? null : (out || errOut).trim().split("\n")[0])));
 
+let checking = null;
 async function getChecks(force = false) {
-  if (checks && !force && Date.now() - checksAt < 60000) return checks;
+  // the page never waits for a re-check: it gets the last result, and a stale one is refreshed behind it
+  if (checks && !force) {
+    if (Date.now() - checksAt > 60000 && !checking) checking = runChecks().finally(() => (checking = null));
+    return checks;
+  }
+  return (checking ||= runChecks().finally(() => (checking = null)));
+}
+
+async function runChecks() {
   const secrets = loadSecrets();
   const [node, python, ffmpeg, claude, numpy, eleven] = await Promise.all([
     run("node", ["--version"]),
@@ -49,6 +58,32 @@ async function getChecks(force = false) {
   ];
   checksAt = Date.now();
   return checks;
+}
+
+// ── what is left on the paid services, cached for a minute (free calls) ──
+let credits = null;
+let creditsAt = 0;
+async function getCredits() {
+  if (credits && Date.now() - creditsAt < 60000) return credits;
+  const env = toolEnv();
+  const get = async (url, headers) => {
+    try {
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+      return r.ok ? await r.json() : null;
+    } catch {
+      return null;
+    }
+  };
+  const [el, or] = await Promise.all([
+    env.ELEVENLABS_API_KEY ? get("https://api.elevenlabs.io/v1/user/subscription", { "xi-api-key": env.ELEVENLABS_API_KEY }) : null,
+    env.OPENROUTER_API_KEY ? get("https://openrouter.ai/api/v1/credits", { Authorization: `Bearer ${env.OPENROUTER_API_KEY}` }) : null,
+  ]);
+  credits = {
+    eleven: el ? { left: el.character_limit - el.character_count, limit: el.character_limit, tier: el.tier } : null,
+    openrouter: or?.data ? { left: Math.round((or.data.total_credits - or.data.total_usage) * 100) / 100 } : null,
+  };
+  creditsAt = Date.now();
+  return credits;
 }
 
 // ── helpers ──
@@ -117,6 +152,7 @@ async function api(req, res, url) {
     return json(res, 202, { id, job: jobSummary(job) });
   }
   if (parts[0] === "profiles") return profilesApi(req, res, parts.slice(1));
+  if (m === "GET" && parts[0] === "credits") return json(res, 200, await getCredits());
   if (parts[0] === "projects" && parts[1]) {
     const id = parts[1];
     if (m === "GET" && !parts[2]) {
@@ -168,6 +204,14 @@ async function api(req, res, url) {
     }
     if (m === "POST" && parts[2] === "claude-reset") {
       saveApp(id, { claudeSession: null, claudeLast: null });
+      return json(res, 200, { ok: true });
+    }
+    if (m === "POST" && parts[2] === "approve") {
+      approve(id, (await body(req)).step);
+      return json(res, 200, { ok: true });
+    }
+    if (m === "POST" && parts[2] === "reveal-file") {
+      revealFile(id, (await body(req)).path);
       return json(res, 200, { ok: true });
     }
     if (m === "POST" && parts[2] === "reveal") {

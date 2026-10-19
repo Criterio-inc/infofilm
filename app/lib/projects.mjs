@@ -86,16 +86,26 @@ function files(dir, re) {
     .sort((a, b) => b.mtime - a.mtime);
 }
 
-/** Where the film is: the next thing to do, judged from the files. */
-function stage(s) {
-  if (!s.brief) return { key: "brief", label: "Skriv en brief" };
-  if (s.demo) return { key: "script", label: "Research och manus" };
-  if (!s.scenes) return { key: "script", label: "Bygg tidslinjen" };
-  if (s.narrated < s.scenes) return { key: "voice", label: "Röst" };
-  if (s.images < s.illustrated) return { key: "images", label: "Bilder" };
-  if (!s.renders.length) return { key: "render", label: "Rendera" };
-  return { key: "done", label: "Klar" };
+export const STEP_NAMES = { script: "Manus", voice: "Röst", images: "Bilder", review: "Titta igenom", deliver: "Leverera" };
+
+/** The five steps of a film, each done or not, judged from the files and the user's approvals.
+ * An approval counts only while what it approved is unchanged (the script, the timeline). */
+function steps(s) {
+  const ok = (k) => (s.approved?.[k] || 0) >= (k === "script" ? s.scriptMtime : s.timelineMtime);
+  const done = {
+    script: !s.demo && s.scenes > 0 && ok("script"),
+    voice: s.scenes > 0 && s.narrated >= s.scenes,
+    images: s.scenes > 0 && s.images >= s.illustrated,
+    review: s.scenesBuilt && Boolean(s.preview) && ok("review"),
+  };
+  // the finished films count once everything before them is done, and only if made after the last change
+  done.deliver = done.script && done.voice && done.images && done.review && s.renders.length > 0 && s.renders[0].mtime >= s.timelineMtime;
+  const list = Object.keys(STEP_NAMES).map((key) => ({ key, label: STEP_NAMES[key], done: done[key] }));
+  const current = list.find((x) => !x.done)?.key || "done";
+  return { list, current };
 }
+
+const mtime = (f) => (existsSync(f) ? statSync(f).mtimeMs : 0);
 
 export function summary(id) {
   const dir = path.join(loadConfig().filmsPath, id);
@@ -104,7 +114,10 @@ export function summary(id) {
   const tl = readJson(path.join(dir, "video/src/timeline/master.json"), null);
   const scenes = tl?.scenes ?? [];
   const script = read(path.join(dir, film.script || "script/script.md"), "");
-  const renders = files(path.join(dir, film.outDir || "out"), /\.mp4$/).filter((f) => !f.name.endsWith(".raw.mp4"));
+  const outDir = path.join(dir, film.outDir || "out");
+  const renders = files(outDir, /\.mp4$/).filter((f) => !f.name.endsWith(".raw.mp4"));
+  const app = readJson(path.join(dir, ".infofilm-app.json"), {});
+  const preview = path.join(outDir, "preview", "preview.mp4");
   const s = {
     id,
     title: film.title || id,
@@ -124,9 +137,17 @@ export function summary(id) {
     images: scenes.filter((x) => x.img && x.name !== "end-card").length,
     thumb: scenes.find((x) => x.img)?.img ? `video/public/${scenes.find((x) => x.img).img}` : null,
     renders,
+    subtitles: files(outDir, /\.srt$/).filter((f) => f.size > 0),
+    approved: app.approved || {},
+    scriptMtime: mtime(path.join(dir, film.script || "script/script.md")),
+    timelineMtime: mtime(path.join(dir, "video/src/timeline/master.json")),
+    // the demo's golden scenes go when Claude builds the film's own
+    scenesBuilt: !existsSync(path.join(dir, "video/src/scenes/TheYear.tsx")),
+    preview: existsSync(preview) ? { path: path.relative(dir, preview), mtime: mtime(preview) } : null,
     modified: Math.max(statSync(path.join(dir, "film.json")).mtimeMs, ...renders.map((r) => r.mtime), existsSync(path.join(dir, "video/src/timeline/master.json")) ? statSync(path.join(dir, "video/src/timeline/master.json")).mtimeMs : 0),
   };
-  s.stage = stage(s);
+  s.steps = steps(s);
+  s.stage = s.steps.current === "done" ? { key: "done", label: "Klar" } : { key: s.steps.current, label: STEP_NAMES[s.steps.current] };
   return s;
 }
 
@@ -190,6 +211,7 @@ export function detail(id) {
       design: readJson(path.join(dir, "voice/design.json"), {}),
     },
     shots: (readJson(path.join(dir, "art/shots.json"), []) || []).length,
+    shotList: (readJson(path.join(dir, "art/shots.json"), []) || []).map((x) => ({ id: x.id, prompt: x.prompt })),
     claudeSession: app.claudeSession || null,
     claudeLast: app.claudeLast || null,
   };

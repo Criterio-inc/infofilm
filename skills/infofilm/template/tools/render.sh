@@ -35,7 +35,7 @@ cd video
 npx tsc --noEmit -p .
 npx remotion render src/index.ts Film "$RAW" \
   --codec=h264 --crf=19 --pixel-format=yuv420p --audio-codec=aac --audio-bitrate=320k \
-  --concurrency="${CONCURRENCY:-4}" --log=error "${BROWSER[@]}"
+  --concurrency="${CONCURRENCY:-4}" --log=error ${BROWSER[@]+"${BROWSER[@]}"}  # bash 3.2 (macOS) and set -u: an empty array needs this form
 cd "$ROOT"
 
 # YouTube target: -14 LUFS integrated, -1 dBTP. Two-pass loudnorm, the video stream is copied.

@@ -122,3 +122,32 @@ dialog.ask::backdrop { background: rgba(10,20,30,.35); }
 .mono { font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
 .savebar { position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); margin: 16px -20px -18px; padding: 12px 20px; display: flex; gap: 12px; align-items: center; border-radius: 0 0 var(--radius) var(--radius); }
 .link.danger { color: var(--bad); }
+
+/* the film page: a step bar and one card for the step in view */
+.film { max-width: 920px; margin: 0 auto; }
+.stepbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.stepbar button { justify-content: flex-start; padding: 9px 10px; font-weight: 600; color: var(--muted); background: var(--panel); }
+.stepbar .n { width: 22px; height: 22px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 12px; background: var(--bg); border: 1px solid var(--line); flex: none; }
+.stepbar button.done { color: var(--ok); }
+.stepbar button.done .n { background: var(--ok); border-color: var(--ok); color: #fff; }
+.stepbar button.next .n { border-color: var(--accent); color: var(--accent); }
+.stepbar button.on { border: 2px solid var(--accent); color: var(--ink); padding: 8px 9px; }
+@media (max-width: 640px) { .stepbar { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.stepcard h2.big { font-size: 22px; margin: 2px 0 6px; }
+.stepcard > p { margin: 0; }
+.facts { display: flex; gap: 8px 18px; flex-wrap: wrap; margin-top: 10px; font-size: 14px; }
+.facts span::before { content: "• "; color: var(--muted); }
+.working, .problem { margin-top: 12px; border-radius: 10px; padding: 10px 12px; }
+.working { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.problem { background: color-mix(in srgb, var(--bad) 8%, var(--panel)); border-left: 4px solid var(--bad); border-radius: 0 10px 10px 0; }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.chip { font-weight: 500; font-size: 13px; padding: 4px 10px; border-radius: 99px; }
+.scenes { display: grid; gap: 10px; }
+.scene { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.scene p { margin: 6px 0 0; }
+.scene-h { display: flex; justify-content: space-between; gap: 10px; }
+.thumbs.big { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+.file video { margin-bottom: 4px; }
+details.tech > summary { color: var(--muted); }
