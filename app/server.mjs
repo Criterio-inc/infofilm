@@ -2,13 +2,15 @@
 // Infofilm: a small local app around the infofilm skill. Listens on 127.0.0.1 only.
 //   node server.mjs            (or ./start.sh, which also opens the window)
 import { execFile } from "node:child_process";
-import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { createProject, PRESETS, reveal, runAction, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
 import { APP_DIR, KEYS, SKILL_DIR, loadConfig, loadSecrets, saveConfig, saveSecrets, toolEnv } from "./lib/config.mjs";
 import { getJob, projectJobs, runningJob, stopAll, stopJob, summary as jobSummary } from "./lib/jobs.mjs";
 import { detail, listProfiles, listProjects, projectDir, saveApp } from "./lib/projects.mjs";
+import { createProfile, jobKey, ownRoot, previewProfile, profileClaude, profileFile, profilePrompt, readProfile, removeFile, saveProfile, upload, voiceToProfile } from "./lib/profiles.mjs";
+import { startJob } from "./lib/jobs.mjs";
 
 const PORT = Number(process.env.INFOFILM_PORT || loadConfig().port || 4747);
 const PUBLIC = path.join(APP_DIR, "public");
@@ -54,12 +56,12 @@ const json = (res, code, body) => {
   res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
   res.end(JSON.stringify(body));
 };
-const body = (req) =>
+const body = (req, max = 2e6) =>
   new Promise((resolve, reject) => {
     let b = "";
     req.on("data", (d) => {
       b += d;
-      if (b.length > 2e6) reject(Object.assign(new Error("för stor"), { status: 413 }));
+      if (b.length > max) reject(Object.assign(new Error("för stor fil (högst 60 MB)"), { status: 413 }));
     });
     req.on("end", () => {
       try {
@@ -114,6 +116,7 @@ async function api(req, res, url) {
     const { job, id } = createProject(await body(req));
     return json(res, 202, { id, job: jobSummary(job) });
   }
+  if (parts[0] === "profiles") return profilesApi(req, res, parts.slice(1));
   if (parts[0] === "projects" && parts[1]) {
     const id = parts[1];
     if (m === "GET" && !parts[2]) {
@@ -139,6 +142,29 @@ async function api(req, res, url) {
         return json(res, 200, { port: null });
       }
       return json(res, 200, await startStudio(id));
+    }
+    if (m === "POST" && parts[2] === "voice") {
+      // the narrator of this film: the design brief (design.json) and/or a ready ElevenLabs voice (voice.json)
+      const b = await body(req);
+      const dir = projectDir(id);
+      const rj = (f, fb) => (existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : fb);
+      if (b.description !== undefined || b.text !== undefined) {
+        const f = path.join(dir, "voice/design.json");
+        const cur = rj(f, { model: "eleven_ttv_v3" });
+        writeFileSync(f, JSON.stringify({ ...cur, ...(b.description !== undefined ? { description: String(b.description) } : {}), ...(b.text !== undefined ? { text: String(b.text) } : {}) }, null, 2) + "\n");
+      }
+      if (b.voice_id !== undefined) {
+        const vid = String(b.voice_id).trim();
+        if (vid && !/^[A-Za-z0-9]{8,40}$/.test(vid)) return json(res, 400, { error: "Voice ID ser inte rätt ut (bokstäver och siffror från ElevenLabs)" });
+        writeFileSync(path.join(dir, "voice/voice.json"), JSON.stringify(vid ? { voice_id: vid, name: String(b.name || "Berättare").slice(0, 60) } : { voice_id: "PUT-YOUR-VOICE-ID-HERE", name: "narrator" }, null, 2) + "\n");
+      }
+      return json(res, 200, { ok: true });
+    }
+    if (m === "POST" && parts[2] === "voice-to-profile") {
+      const film = JSON.parse(readFileSync(path.join(projectDir(id), "film.json"), "utf8"));
+      if (!film.profile) return json(res, 400, { error: "filmen har ingen profil" });
+      const d = voiceToProfile(projectDir(id), film.profile);
+      return json(res, 200, { ok: true, dir: d });
     }
     if (m === "POST" && parts[2] === "claude-reset") {
       saveApp(id, { claudeSession: null, claudeLast: null });
@@ -188,6 +214,55 @@ async function api(req, res, url) {
   json(res, 404, { error: "finns inte" });
 }
 
+// ── client profiles ──
+async function profilesApi(req, res, parts) {
+  const m = req.method;
+  const id = parts[0] ? decodeURIComponent(parts[0]) : null;
+  const withJobs = (pid) => {
+    const r = runningJob(jobKey(pid));
+    return { jobs: projectJobs(jobKey(pid)), running: r ? jobSummary(r) : null };
+  };
+  if (!id && m === "GET") {
+    return json(res, 200, { root: ownRoot(), profiles: listProfiles().map(({ dir, ...p }) => ({ ...p, own: path.dirname(dir) === ownRoot(), running: runningJob(jobKey(p.id)) ? jobSummary(runningJob(jobKey(p.id))) : null })) });
+  }
+  if (!id && m === "POST") {
+    const { id: nid, job } = createProfile((await body(req)).name);
+    return json(res, 202, { id: nid, job: jobSummary(job) });
+  }
+  if (m === "GET" && !parts[1]) {
+    const { dir, ...p } = readProfile(id);
+    return json(res, 200, { ...p, ...withJobs(id) });
+  }
+  if (m !== "POST") return json(res, 404, { error: "finns inte" });
+  const act = parts[1];
+  if (act === "save") {
+    const { fontsChanged } = saveProfile(id, await body(req));
+    let job = null;
+    if (fontsChanged) {
+      const { dir } = readProfile(id);
+      job = startJob(jobKey(id), "Hämta typsnitt", [{ label: "fetch_fonts.py", cmd: "python3", args: [path.join(SKILL_DIR, "template/tools/fetch_fonts.py"), dir], cwd: dir }]);
+    }
+    return json(res, 200, { ok: true, job: job && jobSummary(job) });
+  }
+  if (act === "upload") return json(res, 200, upload(id, await body(req, 8e7)));
+  if (act === "remove") {
+    removeFile(id, (await body(req)).path);
+    return json(res, 200, { ok: true });
+  }
+  if (act === "claude") {
+    const b = await body(req);
+    const prompt = b.preset === "build" ? profilePrompt() + (b.extra ? `\n\nDessutom: ${b.extra}` : "") : b.prompt;
+    return json(res, 202, { job: jobSummary(profileClaude(id, prompt, b.preset === "build" ? "Claude: bygg profilen" : `Claude: ${String(prompt).slice(0, 40)}`)) });
+  }
+  if (act === "claude-reset") {
+    const f = path.join(readProfile(id).dir, ".infofilm-app.json");
+    if (existsSync(f)) writeFileSync(f, JSON.stringify({ ...JSON.parse(readFileSync(f, "utf8")), claudeSession: null, claudeLast: null }, null, 2) + "\n");
+    return json(res, 200, { ok: true });
+  }
+  if (act === "preview") return json(res, 202, { job: jobSummary(previewProfile(id)) });
+  return json(res, 404, { error: "finns inte" });
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   try {
@@ -197,6 +272,13 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== "GET" && req.headers["x-infofilm"] !== "1") return json(res, 403, { error: "saknar appens huvud" });
 
     if (url.pathname.startsWith("/api/")) return await api(req, res, url);
+
+    if (url.pathname.startsWith("/pfiles/")) {
+      const [, , id, ...rest] = url.pathname.split("/");
+      const file = profileFile(decodeURIComponent(id), decodeURIComponent(rest.join("/")));
+      if (!existsSync(file)) return json(res, 404, { error: "finns inte" });
+      return sendFile(req, res, file);
+    }
 
     if (url.pathname.startsWith("/files/")) {
       const [, , id, ...rest] = url.pathname.split("/");

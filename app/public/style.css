@@ -110,3 +110,15 @@ details summary { cursor: pointer; font-weight: 600; }
 code { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
 dialog.ask { border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; background: var(--panel); color: var(--ink); width: min(440px, 90vw); box-shadow: 0 20px 60px rgba(0,0,0,.3); }
 dialog.ask::backdrop { background: rgba(10,20,30,.35); }
+.drop { border: 2px dashed var(--line); border-radius: 12px; padding: 22px; text-align: center; color: var(--muted); }
+.drop.over { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.logo-prev { height: 64px; min-width: 180px; padding: 10px 16px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+.logo-prev img { max-height: 44px; max-width: 260px; }
+.colors { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+.colors .color { margin: 0; font-weight: 400; display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.colors input[type=color] { width: 38px; height: 30px; border: none; background: none; padding: 0; cursor: pointer; }
+.colors b { display: block; font-size: 13px; font-weight: 600; }
+.colors code { font-size: 11px; }
+.mono { font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.savebar { position: sticky; bottom: 0; background: var(--panel); border-top: 1px solid var(--line); margin: 16px -20px -18px; padding: 12px 20px; display: flex; gap: 12px; align-items: center; border-radius: 0 0 var(--radius) var(--radius); }
+.link.danger { color: var(--bad); }
