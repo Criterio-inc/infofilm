@@ -66,11 +66,19 @@ cd ~/films/eu-law/video && npx remotion studio src/index.ts
 ## What a 12-minute film costs (measured)
 | Item | Volume | Cost |
 |---|---|---|
-| Illustrations | about 30 images at 2K, plus retakes and style tests | about $9 |
-| Narration | about 8,000 characters (eleven_v4) | about 900 ElevenLabs credits, depending on plan |
+| Illustrations | 19–30 scene images at 2K (about $0.14 each), plus retakes and style tests | $3–9 |
+| Narration | 6,500–8,000 characters (eleven_v4) | about 0.5 ElevenLabs credits per character: 6,760 characters cost 3,602 credits |
 | Voice design | 1–2 rounds of 3 takes | a few hundred credits |
 | Music | about 7 cues, 2–4 takes each | Suno credits; WAV downloads may count against a plan quota |
 | Render | 13 minutes at 1080p30 | about 50 minutes on a laptop, about 1.2 GB |
+
+## Films made with it
+- **Svenska Valjournalen 2026** (13 min). The election film the skill was extracted from.
+- **Svenska Journalen: Så styrs Sverige** (10.4 min). It is about Sweden's constitution and was the skill's first test run, made end to end from `new_film.sh`. The steps were:
+  1. a research agent wrote 79 sourced sections
+  2. an independent reviewer found 2 MUST and 9 SHOULD issues, which were fixed before a credit was spent
+  3. 19 illustrations, three Suno cues and the narration were made
+  4. two golden scenes were built by hand, and 17 scenes by three parallel builders.
 
 ## Licence
 MIT. The template's fonts (Bowlby One SC, Jost, Lobster) are loaded from Google Fonts under the SIL Open Font License. The sound effects are synthesised by `tools/make_sfx.py`. Your film's narration, music and images are subject to the terms of the services that made them.

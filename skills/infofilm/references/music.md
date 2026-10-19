@@ -17,13 +17,32 @@ Suno has no public API. Use the **official web UI** in Chrome through the claude
 - Keep intros short. The theme must start singing within a second.
 - Generate 2–4 takes per cue. **The user likes the keepers in Suno**, unless they have handed you the choice.
 
+## Driving the Suno UI
+- **Speech tab, Advanced mode.** Fields: Script, Tone and a collapsible **Advanced** (Vocal Gender Male/Female, Background music Off/On, Variety). Each Create gives two takes. A useful pattern is one Create with background music on and one with it off.
+- **Songs tab, Advanced mode.** Fields: Lyrics, Styles, **More Options** (collapsed; Exclude styles and Vocal Gender are inside it) and Song Title.
+- **Fields go wrong.** A click on the title can land on "+ Voice" and open the Voice dialog, and typing can end up in the exclude field. Set React-controlled fields with the native setter, then verify:
+  ```js
+  const set = (el, v) => { const proto = el.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, v); el.dispatchEvent(new Event('input', { bubbles: true })); };
+  set([...document.querySelectorAll('input')].find(e => e.placeholder === 'Exclude styles'), 'schlager, polka, …');
+  ```
+- **Clip ids** are in the list's links: `[...document.querySelectorAll('a[href*="/song/"]')]`. Fetch metadata (title, duration, Suno's own description of the delivery in `metadata.tags`) from `https://studio-api.prod.suno.com/api/clip/<id>`, with the bearer token described below.
+
+## Choosing takes when the user has handed you the choice
+You cannot listen, so choose on evidence and log it:
+- **Suno's own description of the take** (`metadata.tags`). It often names the voice it actually made ("Male deep bass register …" or "Male high, thin register …").
+- **The aligned lyrics.** Did every line get sung? How long is the take, and when does the last word end?
+- **Fit with the film:** the length, and whether the take has background music.
+
+Like the chosen takes in Suno, write the ids in `notes/log.md`, and tell the user which you picked and why, so they can swap.
+
 ## Downloading (WAV)
 1. On the take: open the **⋯ menu → Download**, choose WAV, untick M4A, then press "Unlock & Download".
 2. **Do not navigate away until the file has arrived** in ~/Downloads (about 10 s). Leaving early silently aborts the download.
 3. Suno's CDN links return 403 to scripts, and the streaming m4a can be truncated. The UI download is the reliable path.
 4. WAV downloads may count against a plan quota. Download only the keepers, and ask first.
 
-Move the files to `music/suno/<key>.wav`, and log the take id and title in `notes/log.md`.
+Move the files to `music/suno/<key>.wav`, and log the take id and title in `notes/log.md`. The dialog shows the remaining downloads and when the quota refreshes; note it in the log.
 
 ## Cut points from the aligned lyrics
 Suno's own lyric alignment gives word times. In the Suno tab, run this with the claude-in-chrome `javascript_tool`. It runs in the user's own logged-in session, and the bearer token is the `__session` cookie:
@@ -37,7 +56,7 @@ JSON.stringify(j.aligned_words.map(w => ({ word: w.word, start_s: w.start_s, end
 ```
 python3 music/tools/suno_lines.py music/suno/theme.aligned.json THEME   # → paste into video/src/lyrics.ts
 ```
-It also prints `sungEnd`. Write `music/cuts.json`:
+It also prints `sungEnd`. Check the first line of songs with an instrumental intro: Suno sometimes aligns the first word to 0.0 s. Fix that line's `t` by hand, and leave a comment saying how you set it. Then write `music/cuts.json`:
 ```json
 "theme":  {"file": "suno/theme.wav",  "in": 0.0, "out": 21.4, "sungEnd": 17.6, "fade": 1.0},
 "bed-1":  {"file": "suno/bed-1.wav"},
@@ -52,7 +71,7 @@ Wire the cues in film.json: `"parts": {"PART 1 — …": {"bed": "bed-1"}}` and 
 python3 music/tools/beats.py music/suno/jingle-1.wav        # default range 70–220 BPM
 ```
 - Keep the range wide. A narrow range reads 166 BPM as 118.
-- Swing reports both the beat and its double or half, so listen and pick.
+- Swing reports both the beat and its double or half (a 70 BPM ballad came out as 187.6), so listen and pick. For pulses on the beat, a double still lands on every beat.
 - Check the tool against a click track of a known tempo before you trust it.
 
 The tempo and the first-beat phase go into the scene as `{ bpm, phase }` for `beatPulse` / `KineticLyrics`.

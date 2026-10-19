@@ -17,17 +17,19 @@ if isinstance(words, dict):
 name = sys.argv[2] if len(sys.argv) > 2 else "LINES"
 lines, cur = [], []
 for w in words:
-    text = re.sub(r"\[[^\]]*\]", "", w["word"])
+    # Suno's tokens carry their own spacing ("Goddag, ", "lektion! (") and a section tag rides on the
+    # next word with its own newline ("[Verse]\nHej ") — drop the tag and that newline, keep the rest
+    text = re.sub(r"\[[^\]]*\]\s*", "", w["word"])
     if text.strip():
-        cur.append((text.strip(), w["start_s"], w["end_s"]))
-    if "\n" in w["word"] and cur:
+        cur.append((text, w["start_s"], w["end_s"]))
+    if "\n" in text and cur:
         lines.append(cur)
         cur = []
 if cur:
     lines.append(cur)
 print(f"export const {name}: Line[] = [")
 for ln in lines:
-    txt = " ".join(t for t, _, _ in ln).replace('"', '\\"')
+    txt = re.sub(r"\s+", " ", "".join(t for t, _, _ in ln)).strip().replace('"', '\\"')
     print(f'  {{ t: {ln[0][1]:.2f}, end: {ln[-1][2]:.2f}, text: "{txt}" }},')
 print("];")
 if lines:

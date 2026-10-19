@@ -18,7 +18,7 @@ The card's picture window is 1800×749, about 2.4:1. A 16:9 image loses its top 
 - When the outfit or the mascot changes, regenerate the reference first, then everything else.
 
 ## Inspect every image (no exceptions)
-Open each image with the Read tool and look for:
+Start with `python3 tools/art_sheet.py` (all scene images on one sheet), then zoom into suspects at full size. Look for:
 - **Text**: signs, labels, made-up words ("WHOOSH", "1957", "BALLOT"). The model writes text despite the prompt. Regenerate with an explicit "no letters on X".
 - **Doubled props**: two hats (one on the head, one in the hand), two briefcases, extra limbs.
 - **The never-list**: the model drifts toward cliché props for a mood word, such as bunkers for "dystopian".

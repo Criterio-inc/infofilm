@@ -117,14 +117,16 @@ const outline = (px: number, color: string) =>
 
 const bare = (w: string) => w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
 
-/** The sung line as big kinetic type: each word pops in on its time, the line bounces on the beat. */
-export const KineticLyrics: React.FC<{ lines: Line[]; at: number; beat: Beat; hot?: string[]; size?: number; bottom?: number }> = ({
+/** The sung line as big kinetic type: each word pops in on its time, the line bounces on the beat.
+ * `font` defaults to SCRIPT (Lobster, commercial breaks only); pass DISPLAY for the opening theme or the ballad. */
+export const KineticLyrics: React.FC<{ lines: Line[]; at: number; beat: Beat; hot?: string[]; size?: number; bottom?: number; font?: string }> = ({
   lines,
   at,
   beat,
   hot = [],
   size = 94,
   bottom = 24,
+  font = SCRIPT,
 }) => {
   const { frame: f } = useScene();
   let idx = -1;
@@ -164,7 +166,7 @@ export const KineticLyrics: React.FC<{ lines: Line[]; at: number; beat: Beat; ho
             style={{
               position: "relative",
               display: "inline-block",
-              fontFamily: SCRIPT,
+              fontFamily: font,
               fontSize: size,
               color: isHot ? C.gold : C.paperLight,
               textShadow: `${outline(4, C.ink)}, 7px 8px 0 ${C.red}`,

@@ -10,6 +10,7 @@
   - `python3 tools/lint_cues.py` fails on any cue that doesn't occur in its scene's narration.
 
 ## Golden scenes first
+The scaffold ships the demo's golden scenes (`TheYear.tsx`, `TheRule.tsx`, registered in `golden.ts`). Delete them and register your own.
 Build the two scenes that carry the film's central infographics **yourself**, before you fan out. They set the bar for density, timing, type sizes, plate placement, captions and stamps, and every builder copies their structure. The template ships two: `TheYear.tsx` (a counter, an orbit, a decimal snapping on with a stamp) and `TheRule.tsx` (three rules, then three verdicts landing on their years).
 
 The anatomy of a golden scene:

@@ -7,6 +7,16 @@
 - Copy every figure that will appear on screen into `video/src/data.ts`, with a comment naming the research section. Scenes never type numbers.
 - Before a political or contested subject, decide the impartiality rules and write them into the research file: every side gets the same treatment, and you use neutral verbs.
 
+### Delegating the research
+A research subagent does this well when its prompt includes:
+- the film's subject, language and "timeless, not today's news"
+- the list of topics in film order
+- the list of acceptable primary sources by name
+- the required format: numbered sections, claim + figures + statute + URL + short statute quote, **OSÄKERT/UNCERTAIN** markers, and the date for every figure that can change
+- a closing **"Traps"** section (simplifications the film must not make) and a **"Figures for data.ts"** list.
+
+Tell it to write the file and report back in 15 lines: what was hard to verify, what is uncertain, and the three biggest traps. In one production this surfaced a pending constitutional amendment that would change the very rule a scene explained. The scene was then worded so it stays true either way, and it carries a comment to re-check after the vote.
+
 ## The manuscript (`script/script.md`)
 ```markdown
 ---
@@ -25,7 +35,7 @@ status: draft 1
 Now for the main event! Parliament has three hundred and forty-nine seats. Whoever has one hundred and seventy-five of them behind them has a majority of their own.
 ```
 - **`## Sxx · name`** starts a scene. One scene is one narration file and one card. The name is how components find their scene, so keep it a stable kebab-case word.
-- **`<!-- title: -->`** is the card title: at most 5 words, in capitals, in the film's language.
+- **`<!-- title: -->`** is the card title: at most 5 words, in capitals, in the film's language. It must not repeat the part's kicker (film.json `parts`), because the two sit side by side in the title band.
 - **`<!-- facts: -->`** lists the research sections the scene rests on. The reviewer checks every scene against them.
 - **`> visual:`** is the direction for the illustration and the infographic, written as beats: what arrives on which word.
 - **Narration** is everything else, read exactly as written. Each paragraph becomes one line of the TTS request.

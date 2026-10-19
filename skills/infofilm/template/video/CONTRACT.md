@@ -1,10 +1,10 @@
 # Scene builder contract
 
-You build animated scenes for an infographic explainer film (1920×1080, 30 fps, Remotion 4). The orchestrator fills in the three lines below before handing this out.
+You build animated scenes for an infographic explainer film (1920×1080, 30 fps, Remotion 4). The orchestrator fills in the `{{…}}` placeholders below before handing this out.
 
 - **Film:** {{TITLE}}, about {{MINUTES}} minutes, narrated in {{LANGUAGE}}. On-screen text is in {{LANGUAGE}} too, with correct diacritics (å ä ö é ü …) everywhere.
-- **Look:** {{STYLE}}. The default house style is a 1950s instructional card: cream paper, navy and golden yellow, thick ink, halftone dots, and a retro-futurist world (the future as imagined in 1957: googie, chrome, rockets, monorails, friendly robots).
-- **Tone:** {{TONE}}. The default is American 1950s commercial enthusiasm, cheerful and a little too eager, with a dry irony that the shiny machine keeps getting stuck.
+- **Look:** the house style: a 1950s instructional card with cream paper, navy and golden yellow, thick ink, halftone dots, and a retro-futurist world (the future as imagined in 1957: googie, chrome, rockets, monorails, friendly robots). Replace this line if the film has its own look.
+- **Tone:** American 1950s commercial enthusiasm, cheerful and a little too eager, with a dry irony that the shiny machine keeps getting stuck. Replace this line if the film has its own tone.
 
 This is an **explanatory film about real things**. Every number on screen must be true. If the subject is political, every party or side is treated exactly alike.
 

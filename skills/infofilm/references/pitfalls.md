@@ -20,4 +20,8 @@
 | The fact base itself was wrong | Research from secondary summaries | An independent review against primary sources, covering the research as well as the script |
 | A date-bound phrase ("on Monday") aged within a week | Writing from the calendar | Use absolute dates, or structure that doesn't need them |
 | The disk filled up during stills | Every bundle copies `public/` | The still tools clean up on exit; check the temp folder; render to a big disk |
+| A sung line's first word sits at 0.0 s | Suno's alignment on a song with an instrumental intro | Check the first line of every song; fix its `t` by hand, with a comment saying how |
+| Lyric lines split at section tags, or "( word" gets a stray space | Section tags ride on the next token with their own newline; tokens carry their own spacing | `suno_lines.py` drops the tag plus its newline and joins tokens without adding spaces |
+| The narration claims a rule that is about to change | Pending legislation (a vote planned after the research date) | Research records pending changes; word the scene so it is true under both versions, and add a re-check comment with the date |
+| A timeless film shows a count that will change (agencies, courts, ministries) | Figures copied without their date | Show them with a source line and date, or leave them out (the research marks them ⚠) |
 | Two renders at once, both crawling or crashing | RAM and Chrome instances | One render at a time; builders render stills only |

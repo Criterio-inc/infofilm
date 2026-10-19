@@ -78,8 +78,9 @@ Prompt for American 1950s idioms; genre words like "schlager" drag the music som
 - Run `python3 tools/sync_art.py` and then `python3 tools/build_timeline.py`. Details: [references/images.md](references/images.md).
 
 ### 7 · Scenes (Remotion)
-- Build **two golden scenes yourself**: the scenes that carry the film's central infographics. Make them meet the bar, and register them in `golden.ts`.
+- Build **two golden scenes yourself**: the scenes that carry the film's central infographics. Make them meet the bar, and register them in `golden.ts`, replacing the demo's `TheYear`/`TheRule`.
 - Then fan out to 2–3 parallel builder subagents with `video/CONTRACT.md` (fill in its `{{…}}` lines). Each builder has its own group registry and verifies with contact sheets.
+- Builders can start before the narration exists, because cues follow the estimated words and then move to the real ones by themselves. If the script changes while they work (a review lands), send each builder the exact changes for its scenes with SendMessage.
 - Review every scene's sheet yourself.
 - Details: [references/scenes.md](references/scenes.md).
 
@@ -102,11 +103,11 @@ Visual fixes cost nothing but a re-render; only new narration, images or downloa
 | `film.json` | title, slug, language, locale, part kickers and beds, scene intro/after music, TTS model, outDir |
 | `script/script.md` | the manuscript: `## Sxx · name`, `<!-- title: -->`, `<!-- facts: -->`, `> visual:`, narration |
 | `notes/research.md`, `notes/log.md` | the fact base; decisions and costs |
-| `voice/` | `design.json` + `design_voice.py` (voice design), `narrate.py` (narration + timestamps), `voice.json` |
+| `voice/` | `design.json` + `design_voice.py` (voice design), `narrate.py` (narration + timestamps), `listen.py` (listening page), `voice.json` |
 | `music/` | `suno/*.wav`, `cuts.json`, `tools/beats.py` (tempo), `tools/suno_lines.py` (aligned lyrics → lines) |
 | `art/` | `style.json` (the look, the never-list), `shots.json`, `gen.py`, `img/` |
-| `tools/` | `build_timeline.py`, `cues.py`, `lint_cues.py`, `make_srt.py`, `sync_art.py`, `make_sfx.py`, `render.sh` |
-| `video/src/` | `theme.ts`, `fonts.ts`, `timing.tsx` (`useScene`, `cue`), `data.ts`, `lyrics.ts`, `Music.tsx`, `primitives/` (Card, Bits, Film, Jingle), `scenes/` |
+| `tools/` | `build_timeline.py`, `cues.py`, `lint_cues.py`, `make_srt.py`, `sync_art.py`, `art_sheet.py`, `make_sfx.py`, `render.sh` |
+| `video/src/` | `theme.ts`, `fonts.ts`, `timing.tsx` (`useScene`, `cue`), `data.ts`, `lyrics.ts`, `Music.tsx`, `primitives/` (Card, Bits, Film, Jingle, Hemicycle), `scenes/` |
 | `video/tools/` | `stills.mjs` (contact sheet of chosen frames), `review.mjs` (N frames per scene, many scenes) |
 
 Known traps, with their fixes: [references/pitfalls.md](references/pitfalls.md).
