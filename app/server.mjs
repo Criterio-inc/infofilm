@@ -5,11 +5,12 @@ import { execFile } from "node:child_process";
 import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { approve, createProject, PRESETS, reveal, revealFile, runAction, uploadAudio, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
+import { emptyTrash, listTrash, restore, trashSize } from "./lib/trash.mjs";
+import { approve, createProject, deleteProject, PRESETS, reveal, revealFile, runAction, uploadAudio, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
 import { APP_DIR, KEYS, SKILL_DIR, checkKey, loadConfig, loadSecrets, saveConfig, saveSecrets, toolEnv } from "./lib/config.mjs";
 import { getJob, projectJobs, runningJob, stopAll, stopJob, summary as jobSummary } from "./lib/jobs.mjs";
 import { detail, listProfiles, listProjects, profileDiff, projectDir, saveApp } from "./lib/projects.mjs";
-import { createProfile, jobKey, ownRoot, previewProfile, profileClaude, profileFile, profilePrompt, readProfile, syncPrompt, removeFile, saveProfile, upload, voiceToProfile } from "./lib/profiles.mjs";
+import { createProfile, jobKey, ownRoot, previewProfile, profileClaude, profileFile, profilePrompt, readProfile, deleteProfile, syncPrompt, removeFile, saveProfile, upload, voiceToProfile } from "./lib/profiles.mjs";
 import { startJob } from "./lib/jobs.mjs";
 
 const PORT = Number(process.env.INFOFILM_PORT || loadConfig().port || 4747);
@@ -166,6 +167,10 @@ async function api(req, res, url) {
     return json(res, 202, { id, job: jobSummary(job) });
   }
   if (parts[0] === "profiles") return profilesApi(req, res, parts.slice(1));
+  // the wastebasket: what was deleted, put back, or empty for good
+  if (m === "GET" && parts[0] === "trash") return json(res, 200, { items: listTrash(), bytes: trashSize() });
+  if (m === "POST" && parts[0] === "trash" && parts[1] === "restore") return json(res, 200, restore((await body(req)).entry));
+  if (m === "POST" && parts[0] === "trash" && parts[1] === "empty") return json(res, 200, { removed: emptyTrash((await body(req)).entry) });
   if (m === "GET" && parts[0] === "credits") return json(res, 200, await getCredits());
   if (parts[0] === "projects" && parts[1]) {
     const id = parts[1];
@@ -220,6 +225,7 @@ async function api(req, res, url) {
       saveApp(id, { claudeSession: null, claudeLast: null });
       return json(res, 200, { ok: true });
     }
+    if (m === "POST" && parts[2] === "delete") return json(res, 200, { entry: deleteProject(id) });
     if (m === "GET" && parts[2] === "profile-diff") return json(res, 200, profileDiff(id));
     if (m === "POST" && parts[2] === "upload-audio") {
       return json(res, 202, { job: jobSummary(uploadAudio(id, await body(req, 8e7))) });
@@ -326,6 +332,7 @@ async function profilesApi(req, res, parts) {
     return json(res, 200, { ok: true });
   }
   if (act === "preview") return json(res, 202, { job: jobSummary(previewProfile(id)) });
+  if (act === "delete") return json(res, 200, deleteProfile(id));
   return json(res, 404, { error: "finns inte" });
 }
 

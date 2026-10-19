@@ -7,6 +7,7 @@ import net from "node:net";
 import path from "node:path";
 import { SKILL_DIR, toolEnv } from "./config.mjs";
 import { runningJob, startJob } from "./jobs.mjs";
+import { toTrash } from "./trash.mjs";
 import { designLinks, logLine, profileDir, projectDir, saveApp, writeBrief } from "./projects.mjs";
 import { claudeStep } from "./claude.mjs";
 import { loadConfig } from "./config.mjs";
@@ -288,6 +289,16 @@ export function uploadAudio(id, { name, data }) {
   writeFileSync(cf, JSON.stringify(cuts, null, 2) + "\n");
   logLine(id, `eget ljud uppladdat i appen: ${name}`);
   return runAction(id, "music", { key });
+}
+
+/** A film to the wastebasket (Inställningar → Papperskorgen can restore it). */
+export function deleteProject(id) {
+  const dir = projectDir(id);
+  const busy = runningJob(id);
+  if (busy) throw Object.assign(new Error(`"${busy.title}" körs i filmen: avbryt det först`), { status: 409 });
+  stopStudio(id);
+  const film = JSON.parse(readFileSync(path.join(dir, "film.json"), "utf8"));
+  return toTrash("film", id, dir, film.title);
 }
 
 /** The user approves a step (the script, the preview); it counts until what it approved changes. */

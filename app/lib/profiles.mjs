@@ -6,7 +6,8 @@ import path from "node:path";
 import { claudeStep } from "./claude.mjs";
 import { HOME_DIR, SKILL_DIR, loadConfig } from "./config.mjs";
 import { lockJob, runningJob, startJob, unlockJob } from "./jobs.mjs";
-import { SAFE_ID, defaultLoop, designLinks, listProfiles, musicLoops } from "./projects.mjs";
+import { SAFE_ID, defaultLoop, designLinks, listProfiles, listProjects, musicLoops } from "./projects.mjs";
+import { toTrash } from "./trash.mjs";
 
 const PREVIEW = path.join(HOME_DIR, "preview");
 const readJson = (f, fb = null) => {
@@ -222,6 +223,19 @@ export function removeFile(id, rel) {
       writeJson(cf, cuts);
     }
   }
+}
+
+/** A sender to the wastebasket. Only the user's own profiles: a built-in one lives in the skill. Films made
+ * with it keep working (they hold their own copy) but can no longer take profile changes. */
+export function deleteProfile(id) {
+  const p = find(id);
+  if (!p.own) throw err("en inbyggd avsändare kan inte raderas", 400);
+  const busy = runningJob(jobKey(id));
+  if (busy) throw err(`"${busy.title}" körs för avsändaren: avbryt det först`, 409);
+  const films = listProjects().filter((x) => x.profile === id).map((x) => x.title);
+  const builtin = existsSync(path.join(SKILL_DIR, "profiles", id, "profile.json"));
+  const entry = toTrash("avsandare", id, p.dir, p.name);
+  return { entry, films, builtin };
 }
 
 /** A new profile from _mall, in the own profiles folder. */

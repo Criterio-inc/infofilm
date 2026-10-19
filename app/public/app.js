@@ -417,7 +417,7 @@ async function projectPage(id) {
     <div class="stack film">
       <div class="spread">
         <div><h1>${esc(p.title)}</h1><div class="muted">${swatch(p.palette)} ${esc(p.profileName)} · ${modeName(p.mode)} · ${esc(p.formats.join(" och "))}${p.scenes.length ? ` · ${p.scenes.length} scener · ${p.seconds} s` : ""}</div></div>
-        ${p.preview ? `<button data-play>▶ Spela snabbversionen</button>` : ""}
+        <div class="row">${p.preview ? `<button data-play>▶ Spela snabbversionen</button>` : ""}<button class="link danger small" data-delete-film ${busy ? "disabled" : ""}>Radera filmen</button></div>
       </div>
       ${p.profileNewer ? `<div class="panel banner small row" style="justify-content:space-between"><span>${esc(p.profileName)}s profil har ändrats sedan den lades in i filmen.</span><button data-profile-update ${busy ? "disabled" : ""}>Visa ändringarna</button></div>` : ""}
       <div class="stepbar">${p.steps.list.map((s, i) => `<button data-view="${s.key}" class="${s.done ? "done" : ""} ${s.key === view ? "on" : ""} ${s.key === cur && !s.done ? "next" : ""}"><span class="n">${s.done ? "✓" : i + 1}</span>${esc(s.label)}</button>`).join("")}</div>
@@ -513,6 +513,16 @@ async function projectPage(id) {
       reload();
     } catch (err) {
       toast(err.message);
+    }
+  });
+  app.querySelector("[data-delete-film]")?.addEventListener("click", async () => {
+    if (!(await ask({ title: `Radera ${p.title}?`, text: "Filmen flyttas till papperskorgen och kan återställas under Inställningar tills du tömmer den.", ok: "Radera filmen" }))) return;
+    try {
+      await api(`projects/${enc}/delete`, { body: {} });
+      toast(`${p.title} ligger i papperskorgen`);
+      location.hash = "#/";
+    } catch (e) {
+      toast(e.message);
     }
   });
   app.querySelector("[data-play]")?.addEventListener("click", async () => {
@@ -727,7 +737,7 @@ async function customerPage(id) {
     <div class="stack">
       <div class="spread">
         <div><h1>${esc(P.name || id)}</h1><div class="muted">${swatch({ band: pal.band, primary: pal.primary, accent: pal.accent, surface: pal.surfaceLight, backdrop: pal.backdrop })} ${esc(id)} · ${k.own ? "egen profil" : "inbyggd – sparas som egen kopia när du ändrar"}</div></div>
-        <div class="row"><a class="btn" href="#/kunder">← Avsändare</a><a class="btn" href="#/new?profile=${encodeURIComponent(id)}">+ Ny film</a></div>
+        <div class="row"><a class="btn" href="#/kunder">← Avsändare</a><a class="btn" href="#/new?profile=${encodeURIComponent(id)}">+ Ny film</a>${k.own && id !== "_mall" ? `<button class="link danger small" data-delete-profile>Radera avsändaren</button>` : ""}</div>
       </div>
       ${/PLACEHOLDER/i.test(P._doc || "") ? `<div class="panel banner small"><b>Platshållare.</b> Färger, typsnitt och logga är inte avsändarens egna än. Ladda upp avsändarens material nedan och låt Claude bygga profilen, eller fyll i själv.</div>` : ""}
       <div class="cols">
@@ -955,6 +965,18 @@ async function customerPage(id) {
     claude({ preset: "build" });
   });
   app.querySelector("[data-sync]")?.addEventListener("click", () => claude({ preset: "sync" }));
+  app.querySelector("[data-delete-profile]")?.addEventListener("click", async () => {
+    const films = (await api("projects")).filter((x) => x.profile === id).map((x) => x.title);
+    const text = `Avsändaren flyttas till papperskorgen och kan återställas under Inställningar tills du tömmer den.${films.length ? `\n\n${films.length === 1 ? "Filmen" : `De ${films.length} filmerna`} ${films.join(", ")} fungerar ändå, men kan inte längre ta emot ändringar i profilen.` : ""}`;
+    if (!(await ask({ title: `Radera ${P.name || id}?`, text, ok: "Radera avsändaren" }))) return;
+    try {
+      const r = await api(`${base}/delete`, { body: {} });
+      toast(r.builtin ? `Din kopia ligger i papperskorgen: den inbyggda ${P.name || id} används igen` : `${P.name || id} ligger i papperskorgen`);
+      location.hash = "#/kunder";
+    } catch (e) {
+      toast(e.message);
+    }
+  });
   $("#kask").addEventListener("submit", (e) => {
     e.preventDefault();
     const prompt = e.target.prompt.value.trim();
@@ -982,7 +1004,7 @@ function settingsPage() {
         <label>Filmer <span class="hint">– där projekten skapas</span></label><input type="text" name="filmsDir" value="${esc(c.filmsDir)}">
         <label>Mapp för egna profiler <span class="hint">– valfritt, t.ex. en privat mapp eller ett privat repo (INFOFILM_PROFILES)</span></label><input type="text" name="profilesDir" value="${esc(c.profilesDir)}" placeholder="~/Kundprofiler">
         <h2 style="margin-top:20px">API-nycklar</h2>
-        <p class="small muted">Sparas bara på den här datorn, i ~/.infofilm/secrets.json (läsbar endast för dig). Lämna tomt för att behålla.</p>
+        <p class="small muted">Sparas krypterade i macOS-nyckelringen och testas mot tjänsten innan de sparas. Lämna tomt för att behålla.</p>
         <label>ElevenLabs <span class="hint">– berättarröst · ${esc(state.keys.ELEVENLABS_API_KEY || "saknas")}</span></label><input type="password" name="ELEVENLABS_API_KEY" autocomplete="off">
         <label>OpenRouter <span class="hint">– illustrationer (Gemini) · ${esc(state.keys.OPENROUTER_API_KEY || "saknas")}</span></label><input type="password" name="OPENROUTER_API_KEY" autocomplete="off">
         <details style="margin-top:14px"><summary>Avancerat</summary>
@@ -992,13 +1014,40 @@ function settingsPage() {
         </details>
         <div class="row" style="margin-top:16px"><button class="primary">Spara</button><button type="button" class="danger" data-quit>Avsluta appen</button></div>
       </form>
-      <div class="panel small"><h2>Avsändarprofiler</h2>${state.profiles.map((p) => `<div class="spread" style="padding:4px 0"><span>${swatch(p.palette)} <b>${esc(p.name)}</b> <span class="muted">${esc(p.id)}</span></span>${p.placeholder ? '<span class="warn">platshållare</span>' : ""}</div>`).join("")}
-        <p class="muted" style="margin-top:10px">Ny avsändare: be Claude i en film, eller kör <code>scripts/new_profile.sh</code>. Profilredigering i appen kommer i nästa version.</p></div>
+      <div class="panel small"><h2>Avsändare</h2>${state.profiles.map((p) => `<div class="spread" style="padding:4px 0"><a href="#/kund/${encodeURIComponent(p.id)}">${swatch(p.palette)} <b>${esc(p.name)}</b></a>${p.placeholder ? '<span class="warn">platshållare</span>' : ""}</div>`).join("")}</div>
+      <div class="panel" id="trash"><h2>Papperskorgen</h2><p class="small muted">Laddar …</p></div>
     </div>`;
   $("[data-recheck]").addEventListener("click", async () => {
     state = await api("state?recheck=1");
     settingsPage();
   });
+  // deleted films and senders: put back, or remove for good
+  const trash = async () => {
+    const { items, bytes } = await api("trash");
+    const box = $("#trash");
+    if (!box) return;
+    box.innerHTML = `<h2>Papperskorgen</h2>
+      <p class="small muted">Raderade filmer och avsändare ligger här tills du tömmer papperskorgen. Ligger något nytt på samma plats nu går posten inte att återställa förrän det har bytt namn.</p>
+      ${items.length ? `<div class="small">${items.map((x) => `<div class="spread" style="padding:6px 0;border-top:1px solid var(--line)"><span><b>${esc(x.name)}</b> <span class="muted">${x.kind === "film" ? "film" : "avsändare"} · raderad ${ago(x.deletedAt)}</span></span><span class="row"><button class="link small" data-restore="${esc(x.entry)}" ${x.exists ? "disabled title=\"Något nytt ligger på samma plats\"" : ""}>Återställ</button><button class="link danger small" data-purge="${esc(x.entry)}">Radera för gott</button></span></div>`).join("")}</div>
+        <div class="row" style="margin-top:10px"><button class="danger" data-empty>Töm papperskorgen (${(bytes / 1e6).toFixed(1).replace(".", ",")} MB)</button></div>` : `<p class="small">Papperskorgen är tom.</p>`}`;
+    box.querySelectorAll("[data-restore]").forEach((b) => b.addEventListener("click", async () => {
+      try {
+        const m = await api("trash/restore", { body: { entry: b.dataset.restore } });
+        toast(`${m.name} är återställd`);
+        state = await api("state");
+        settingsPage();
+      } catch (e) {
+        toast(e.message);
+      }
+    }));
+    box.querySelectorAll("[data-purge]").forEach((b) => b.addEventListener("click", async () => {
+      if (await ask({ title: "Radera för gott?", text: "Det går inte att ångra.", ok: "Radera för gott" })) api("trash/empty", { body: { entry: b.dataset.purge } }).then(trash, (e) => toast(e.message));
+    }));
+    box.querySelector("[data-empty]")?.addEventListener("click", async () => {
+      if (await ask({ title: "Töm papperskorgen?", text: `${items.length} ${items.length === 1 ? "post" : "poster"} raderas för gott. Det går inte att ångra.`, ok: "Töm" })) api("trash/empty", { body: {} }).then(trash, (e) => toast(e.message));
+    });
+  };
+  trash().catch((e) => toast(e.message));
   $("[data-quit]").addEventListener("click", async () => {
     if (!(await ask({ title: "Avsluta Infofilm?", text: "Pågående jobb avbryts.", ok: "Avsluta" }))) return;
     await api("quit", { body: {} }).catch(() => {});
