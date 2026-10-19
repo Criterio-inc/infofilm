@@ -91,6 +91,28 @@ export function readProfile(id) {
   };
 }
 
+// a font file's weight from its name: "BrandSans-SemiBold.woff2" → 600
+const WEIGHTS = [[/hairline|thin/i, 100], [/extra-?light|ultra-?light/i, 200], [/light/i, 300], [/medium/i, 500], [/semi-?bold|demi-?bold/i, 600], [/extra-?bold|ultra-?bold/i, 800], [/black|heavy/i, 900], [/bold/i, 700]];
+export const fontWeight = (name) => WEIGHTS.find(([re]) => re.test(name))?.[1] ?? 400;
+
+/** The client's own font files (fonts/*.woff2|woff|ttf|otf, not the Google folder) wired into every role that
+ * uses its own files (google: false), with a weight from each name; a weight set earlier is kept. */
+function wireFonts(d) {
+  const f = path.join(d, "profile.json");
+  const prof = readJson(f, {});
+  const own = files(d, "fonts").filter((x) => /\.(woff2?|ttf|otf)$/i.test(x.name));
+  let changed = false;
+  for (const role of ["display", "ui"]) {
+    const spec = prof.fonts?.[role];
+    if (!spec || spec.google !== false) continue;
+    const before = JSON.stringify(spec.files || []);
+    spec.files = own.map((x) => ({ file: x.path, weight: (spec.files || []).find((e) => e.file === x.path)?.weight ?? fontWeight(x.name) }));
+    if (JSON.stringify(spec.files) !== before) changed = true;
+  }
+  if (changed) writeJson(f, prof);
+  return changed;
+}
+
 /** Save what the profile page edits. Each part is optional; only what is sent changes. */
 export function saveProfile(id, b) {
   const d = writableDir(id);
@@ -113,6 +135,8 @@ export function saveProfile(id, b) {
     writeJson(f, next);
     fontsChanged = JSON.stringify(next.fonts || {}) !== before;
   }
+  // a role switched to the client's own files gets the uploaded files
+  if (b.profile?.fonts) wireFonts(d);
   if (b.style) {
     const f = path.join(d, "style.json");
     writeJson(f, { ...readJson(f, {}), ...b.style });
@@ -175,6 +199,7 @@ export function upload(id, { kind, name, data }) {
     cuts[key] = { file: `suno/${fileName}`, label: stem.replace(/[-_]+/g, " ") };
     writeJson(cf, cuts);
   }
+  if (kind === "font") wireFonts(d);
   if (kind === "logo") {
     const f = path.join(d, "profile.json");
     const cur = readJson(f, {});
@@ -187,6 +212,7 @@ export function removeFile(id, rel) {
   if (!/^(material|img|fonts|music)\/[^/]+$/.test(rel || "") || rel.includes("..") || rel === "music/cuts.json") throw err("kan inte ta bort den filen");
   const d = writableDir(id);
   rmSync(path.join(d, rel), { force: true });
+  if (rel.startsWith("fonts/")) wireFonts(d);
   if (rel.startsWith("music/")) {
     // the loop goes from cuts.json too, and stops being the default
     const cf = path.join(d, "music/cuts.json");

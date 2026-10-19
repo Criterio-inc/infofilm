@@ -3,7 +3,7 @@
 
   apply_profile.py <profile-dir> <project-dir> [--mode klipp|film] [--formats 16:9,1:1]
                    [--slug s] [--title t] [--lang xx] [--locale xx-XX] [--design-systems url,url]
-                   [--music bed-lugn|none]
+                   [--music bed-lugn|none] [--keep-voice]
 
   profile.json, logo, fonts/, NOTES.md → brand/          (what the video reads)
   style.json                         → art/style.json  (the look of the illustrations)
@@ -14,6 +14,8 @@ film.json gets the slug, title, language, locale, mode and formats (and this fil
 links, on top of the profile's), and its parts and scene hooks
 are wired to the profile's music keys: a key without a file is simply skipped. The background loop
 (a "bed" key) is the profile's "music.bed", or --music; --music none gives a film without one.
+--keep-voice leaves the film's narrator alone (voice/design.json and voice.json): updating the look of
+a film that is already narrated must not change its voice, or every scene would be read (and billed) again.
 """
 import argparse
 import json
@@ -33,6 +35,7 @@ def main():
     ap.add_argument("project")
     for k in ("mode", "formats", "slug", "title", "lang", "locale", "design-systems", "music"):
         ap.add_argument(f"--{k}", default="")
+    ap.add_argument("--keep-voice", action="store_true")
     a = ap.parse_args()
     prof_dir, proj = Path(a.profile).resolve(), Path(a.project).resolve()
     prof = json.loads((prof_dir / "profile.json").read_text(encoding="utf-8"))
@@ -42,6 +45,8 @@ def main():
     shutil.copytree(prof_dir, brand, ignore=lambda d, names: TO_BRAND_SKIP & set(names) if Path(d) == prof_dir else set())
     (brand / "PROFILE").write_text(prof_dir.name + "\n")
     for name, dst in (("style.json", "art/style.json"), ("design.json", "voice/design.json"), ("voice.json", "voice/voice.json")):
+        if a.keep_voice and name != "style.json":
+            continue
         if (prof_dir / name).exists():
             shutil.copy2(prof_dir / name, proj / dst)
     if (prof_dir / "img").is_dir():

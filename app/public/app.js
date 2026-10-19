@@ -243,7 +243,7 @@ async function jobText(jobId) {
 }
 
 const stepOf = (title) =>
-  /^Röst/.test(title) ? "voice" : /^Bilder|bildprompter/i.test(title) ? "images" : /Snabbförhandsvisning|Stillbilder|bygg scenerna|granska|Musikprompt|^Musik/i.test(title) ? "review"
+  /^Uppdatera filmen/.test(title) ? null : /^Röst/.test(title) ? "voice" : /^Bilder|bildprompter/i.test(title) ? "images" : /Snabbförhandsvisning|Stillbilder|bygg scenerna|granska|Musikprompt|^Musik/i.test(title) ? "review"
   : /^Rendera/.test(title) ? "deliver" : /research och manus/i.test(title) ? "script" : null;
 const kr = (n) => new Intl.NumberFormat("sv-SE").format(n);
 const list = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} och ${xs[xs.length - 1]}` : xs[0] || "");
@@ -419,6 +419,7 @@ async function projectPage(id) {
         <div><h1>${esc(p.title)}</h1><div class="muted">${swatch(p.palette)} ${esc(p.profileName)} · ${modeName(p.mode)} · ${esc(p.formats.join(" och "))}${p.scenes.length ? ` · ${p.scenes.length} scener · ${p.seconds} s` : ""}</div></div>
         ${p.preview ? `<button data-play>▶ Spela snabbversionen</button>` : ""}
       </div>
+      ${p.profileNewer ? `<div class="panel banner small row" style="justify-content:space-between"><span>${esc(p.profileName)}s profil har ändrats sedan den lades in i filmen.</span><button data-profile-update ${busy ? "disabled" : ""}>Visa ändringarna</button></div>` : ""}
       <div class="stepbar">${p.steps.list.map((s, i) => `<button data-view="${s.key}" class="${s.done ? "done" : ""} ${s.key === view ? "on" : ""} ${s.key === cur && !s.done ? "next" : ""}"><span class="n">${s.done ? "✓" : i + 1}</span>${esc(s.label)}</button>`).join("")}</div>
       <div class="panel stepcard">
         <div class="muted small">${view === cur && !done[view] ? "Nästa steg" : `Steg ${order.indexOf(view) + 1} · ${esc(STEP_NAMES[view])}`}</div>
@@ -444,7 +445,7 @@ async function projectPage(id) {
           <div id="techlog" class="console">${p.jobs.length ? "Välj ett jobb för att se dess logg." : "Inget har körts ännu."}</div>
           ${p.jobs.length ? `<div class="small">${p.jobs.slice(0, 10).map((j) => `<div class="spread"><button class="link" data-job="${j.id}">${esc(j.title)}</button><span class="${j.status === "done" ? "ok" : j.status === "running" ? "warn" : "bad"}">${{ done: "klart", running: "körs", failed: "misslyckades", stopped: "avbrutet" }[j.status]} · ${ago(j.started)}</span></div>`).join("")}</div>` : ""}
           ${busy ? `<div><button class="danger" data-stop="${p.running.id}">Avbryt det som körs</button></div>` : ""}
-          <div class="row">${p.formats.map((f) => `<button data-stills="${f}" ${busy ? "disabled" : ""}>Stillbilder ${f}</button>`).join("")}<button data-studio>${p.studio ? "Öppna Remotion Studio" : "Remotion Studio"}</button><button data-reveal="">Projektmappen i Finder</button></div>
+          <div class="row">${p.formats.map((f) => `<button data-stills="${f}" ${busy ? "disabled" : ""}>Stillbilder ${f}</button>`).join("")}<button data-studio>${p.studio ? "Öppna Remotion Studio" : "Remotion Studio"}</button><button data-reveal="">Projektmappen i Finder</button><button data-profile-update ${busy ? "disabled" : ""}>Uppdatera filmen med avsändarens profil</button></div>
           ${p.formats.map((f) => (Object.keys(p.stills[f] || {}).length ? `<details><summary>Stillbilder ${f}</summary><div class="sheets stack" style="margin-top:8px">${Object.entries(p.stills[f]).map(([sid, st]) => `<figure style="margin:0"><figcaption class="small muted">${esc(sid)}</figcaption><img loading="lazy" src="${fileUrl(id, st.path, st.mtime)}" alt=""></figure>`).join("")}</div></details>` : "")).join("")}
           <details><summary>Produktionslogg</summary><div class="log-md">${esc(p.log)}</div></details>
         </div>
@@ -468,6 +469,18 @@ async function projectPage(id) {
     window.scrollTo({ top: 0 });
   }));
   $("#bedsel")?.addEventListener("change", (e) => act("music", { key: e.target.value }));
+  // the sender's profile as it is now, into this film: show what changes first, then a yes
+  app.querySelectorAll("[data-profile-update]").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      const d = await api(`projects/${enc}/profile-diff`);
+      if (d.missing) return toast(`Avsändaren ${d.profile} finns inte längre`);
+      if (!d.changes.length) return toast("Filmen har redan avsändarens profil som den är nu");
+      const text = `Det här ändras i filmen:\n${d.changes.map((c) => `• ${c}`).join("\n")}\n\nFilmens format, språk, musikval och berättarröst behålls. Det kostar inget, men du gör en ny snabbversion och nya färdiga filmer efteråt.`;
+      if (await ask({ title: `Uppdatera med ${d.name}s profil?`, text, ok: "Uppdatera filmen" })) act("apply-profile");
+    } catch (e) {
+      toast(e.message);
+    }
+  }));
   app.querySelector("[data-musicprompt]")?.addEventListener("click", async () => {
     const wish = $("#musicwish")?.value.trim();
     try {
@@ -746,7 +759,14 @@ async function customerPage(id) {
             </div>
             <label class="row" style="font-weight:400"><input type="checkbox" name="f_upper" ${F.display?.uppercase ? "checked" : ""}> Rubriker i versaler</label>
             <div class="row" style="margin-top:6px"><label class="btn" style="margin:0">Ladda upp typsnittsfiler<input type="file" id="fontf" accept=".woff2,.woff,.ttf,.otf" multiple hidden></label>
-              <span class="small muted">${k.fonts.length ? k.fonts.map((f) => esc(f.name)).join(", ") : "inga egna filer"}${fontFiles("display").length ? " · kopplade av Claude/profilen" : ""}</span></div>
+              <span class="small muted">${k.fonts.length ? k.fonts.map((f) => esc(f.name)).join(", ") : "inga egna filer"}</span></div>
+            ${(() => {
+              // which uploaded file each role uses, with its weight; or a nudge when files lie unused
+              const used = ["display", "ui"].filter((r) => (F[r]?.files || []).length);
+              if (used.length)
+                return `<div class="small" style="margin-top:6px">${used.map((r) => `<b>${r === "display" ? "Rubriker" : "Text"}:</b> ${F[r].files.map((x) => `${esc(x.file.replace(/^fonts\//, ""))} (${esc(x.weight)})`).join(", ")}`).join("<br>")}</div>`;
+              return k.fonts.length ? `<div class="small warn" style="margin-top:6px">Filerna används inte än. Välj Källa: Egna typsnittsfiler, skriv typsnittets namn och spara.</div>` : "";
+            })()}
           </div>
 
           <div class="section">

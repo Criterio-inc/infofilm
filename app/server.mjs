@@ -8,7 +8,7 @@ import path from "node:path";
 import { approve, createProject, PRESETS, reveal, revealFile, runAction, uploadAudio, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
 import { APP_DIR, KEYS, SKILL_DIR, checkKey, loadConfig, loadSecrets, saveConfig, saveSecrets, toolEnv } from "./lib/config.mjs";
 import { getJob, projectJobs, runningJob, stopAll, stopJob, summary as jobSummary } from "./lib/jobs.mjs";
-import { detail, listProfiles, listProjects, projectDir, saveApp } from "./lib/projects.mjs";
+import { detail, listProfiles, listProjects, profileDiff, projectDir, saveApp } from "./lib/projects.mjs";
 import { createProfile, jobKey, ownRoot, previewProfile, profileClaude, profileFile, profilePrompt, readProfile, syncPrompt, removeFile, saveProfile, upload, voiceToProfile } from "./lib/profiles.mjs";
 import { startJob } from "./lib/jobs.mjs";
 
@@ -220,6 +220,7 @@ async function api(req, res, url) {
       saveApp(id, { claudeSession: null, claudeLast: null });
       return json(res, 200, { ok: true });
     }
+    if (m === "GET" && parts[2] === "profile-diff") return json(res, 200, profileDiff(id));
     if (m === "POST" && parts[2] === "upload-audio") {
       return json(res, 202, { job: jobSummary(uploadAudio(id, await body(req, 8e7))) });
     }

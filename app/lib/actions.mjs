@@ -117,6 +117,17 @@ export function runAction(id, action, args = {}) {
       return startJob(id, key ? "Musik: byt slinga" : "Musik: ingen", [build(dir)]);
     }
 
+    case "apply-profile": {
+      // the sender's profile as it is now, into this film: its formats, language, music choice and voice stay
+      const pdir = profileDir(film.profile);
+      const bed = film.bed ?? Object.values(film.parts || {}).map((x) => x.bed).find((b) => b) ?? "";
+      const a = [path.join(SKILL_DIR, "scripts/apply_profile.py"), pdir, dir, "--formats", (film.formats || ["16:9"]).join(","), "--keep-voice", "--music", bed || "none"];
+      if (film.language) a.push("--lang", film.language);
+      if (film.locale) a.push("--locale", film.locale);
+      logLine(id, `avsändarens profil (${film.profile}) uppdaterad i filmen i appen`);
+      return startJob(id, "Uppdatera filmen med profilen", [{ label: "Profilen in i filmen", cmd: "python3", args: a, cwd: dir }, build(dir)]);
+    }
+
     case "preview": {
       // a quick look at the whole film: the main format at half size, no loudness pass (free, a minute or two)
       const out = path.join(dir, "out", "preview");
