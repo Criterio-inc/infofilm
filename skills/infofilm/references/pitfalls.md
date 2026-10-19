@@ -25,3 +25,5 @@
 | The narration claims a rule that is about to change | Pending legislation (a vote planned after the research date) | Research records pending changes; word the scene so it is true under both versions, and add a re-check comment with the date |
 | A timeless film shows a count that will change (agencies, courts, ministries) | Figures copied without their date | Show them with a source line and date, or leave them out (the research marks them ⚠) |
 | Two renders at once, both crawling or crashing | RAM and Chrome instances | One render at a time; builders render stills only |
+| Scene images come out as a worn paper sheet with edges or a frame | The style reference is a model sheet on aged paper, and `style_only` asked to match its "aged paper" | `style_only` takes only the drawing style ("not its paper sheet, worn edges or layout"); `kinds.film` forbids paper sheets, worn edges and rounded corners |
+| A real building comes out as a generic one | The model draws its own idea of the place | Attach photographs with `photos` (see images.md, "Real places") |
