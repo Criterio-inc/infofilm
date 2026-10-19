@@ -171,6 +171,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKUI
         return nil
     }
 
+    // <input type="file"> ("Välj filer", logo, fonts): a WKWebView opens no file dialog unless the app does
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.canChooseFiles = true
+        panel.prompt = "Välj"
+        panel.beginSheetModal(for: window) { r in completionHandler(r == .OK ? panel.urls : nil) }
+    }
+
     // alert / confirm / prompt: a WKWebView shows nothing unless the app draws them
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
         let a = NSAlert()
