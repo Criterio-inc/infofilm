@@ -2,14 +2,15 @@
 """Put a client profile into a film project (scripts/new_film.sh runs this; run it again to switch).
 
   apply_profile.py <profile-dir> <project-dir> [--mode klipp|film] [--formats 16:9,1:1]
-                   [--slug s] [--title t] [--lang xx] [--locale xx-XX]
+                   [--slug s] [--title t] [--lang xx] [--locale xx-XX] [--design-systems url,url]
 
   profile.json, logo, fonts/, NOTES.md → brand/          (what the video reads)
   style.json                         → art/style.json  (the look of the illustrations)
   img/*                              → art/img/        (a recurring character's reference image)
   design.json, voice.json            → voice/          (the narrator: design brief, saved voice id)
   music/*.wav + music/cuts.json      → music/suno/ + music/cuts.json (theme, bed, sting, outro …)
-film.json gets the slug, title, language, locale, mode and formats, and its parts and scene hooks
+film.json gets the slug, title, language, locale, mode and formats (and this film's own design-system
+links, on top of the profile's), and its parts and scene hooks
 are wired to the profile's music keys: a key without a file is simply skipped.
 """
 import argparse
@@ -25,7 +26,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("profile")
     ap.add_argument("project")
-    for k in ("mode", "formats", "slug", "title", "lang", "locale"):
+    for k in ("mode", "formats", "slug", "title", "lang", "locale", "design-systems"):
         ap.add_argument(f"--{k}", default="")
     a = ap.parse_args()
     prof_dir, proj = Path(a.profile).resolve(), Path(a.project).resolve()
@@ -66,6 +67,10 @@ def main():
         film["slug"] = a.slug
     if a.title:
         film["title"] = a.title
+    links = [u for u in a.design_systems.replace(",", " ").split() if u]
+    if links:
+        known = {d["url"] for d in film.get("designSystems", [])}
+        film["designSystems"] = film.get("designSystems", []) + [{"url": u} for u in links if u not in known]
     if not wire:
         pass
     elif mode == "klipp":
@@ -77,6 +82,9 @@ def main():
                          for p, v in film.get("parts", {}).items()}
     film_path.write_text(json.dumps(film, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"profile {prof_dir.name} ({prof.get('name', '?')}) → {proj}: {mode}, {', '.join(formats)}")
+    ds = len(prof.get("designSystems", [])) + len(film.get("designSystems", []))
+    if ds:
+        print(f"  {ds} linked design system(s): read them before the script, image prompts and scenes")
 
 
 if __name__ == "__main__":

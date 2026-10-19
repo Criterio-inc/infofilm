@@ -2,12 +2,12 @@
 // Paid steps (voice, images) only run after the page has shown the dry-run and the user approved;
 // the approval and the estimate go into notes/log.md, as the skill requires.
 import { spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { SKILL_DIR, toolEnv } from "./config.mjs";
 import { startJob } from "./jobs.mjs";
-import { logLine, profileDir, projectDir, saveApp, writeBrief } from "./projects.mjs";
+import { designLinks, logLine, profileDir, projectDir, saveApp, writeBrief } from "./projects.mjs";
 import { claudeStep } from "./claude.mjs";
 import { loadConfig } from "./config.mjs";
 
@@ -112,7 +112,9 @@ export function createProject(b) {
   const dir = path.join(root, slug);
   if (existsSync(dir)) throw Object.assign(new Error(`det finns redan ett projekt som heter ${slug}`), { status: 409 });
   const formats = (b.formats || []).filter((f) => ["16:9", "1:1", "9:16"].includes(f));
-  const args = [path.join(SKILL_DIR, "scripts/new_film.sh"), dir, "--profile", profileDir(b.profile || "criterio"), "--mode", b.mode === "film" ? "film" : "klipp", "--slug", slug, "--title", String(b.title || slug)];
+  // design systems for this film only, on top of the client's (checked before anything is made)
+  const designSystems = designLinks(b.designSystems);
+  const args = [path.join(SKILL_DIR, "scripts/new_film.sh"), dir, "--profile", profileDir(b.profile || "critero"), "--mode", b.mode === "film" ? "film" : "klipp", "--slug", slug, "--title", String(b.title || slug)];
   if (formats.length) args.push("--format", formats.join(","));
   const steps = [
     { label: "Nytt projekt från mallen", cmd: "bash", args, cwd: SKILL_DIR, parse: (l) => (/npm notice/.test(l) ? null : l) },
@@ -122,8 +124,12 @@ export function createProject(b) {
       args: [],
       cwd: SKILL_DIR,
       after: () => {
-        writeBrief(dir, b);
-        logLine(slug, `projektet skapat i appen (profil ${b.profile || "criterio"}, ${b.mode === "film" ? "film" : "klipp"}, ${formats.join(", ") || "profilens format"})`);
+        writeBrief(dir, { ...b, designSystems });
+        if (designSystems.length) {
+          const f = path.join(dir, "film.json");
+          writeFileSync(f, JSON.stringify({ ...JSON.parse(readFileSync(f, "utf8")), designSystems }, null, 2) + "\n");
+        }
+        logLine(slug, `projektet skapat i appen (profil ${b.profile || "critero"}, ${b.mode === "film" ? "film" : "klipp"}, ${formats.join(", ") || "profilens format"})`);
       },
     },
   ];
@@ -146,17 +152,17 @@ export const PRESETS = {
   script: {
     label: "Research och manus",
     prompt:
-      "Läs brand/NOTES.md och notes/brief.md. Gör fas 1 (research → notes/research.md, med primärkällor) och fas 3 (manus → script/script.md) enligt skillen, i projektets läge och längd. Ersätt demon helt, även data.ts där det behövs. Låt en oberoende subagent granska manus och research mot primärkällorna och åtgärda allt som är MUST. Kör sedan python3 tools/build_timeline.py. Avsluta med en kort sammanfattning av manuset och det jag behöver godkänna.",
+      "Läs brand/NOTES.md, notes/brief.md och de länkade designsystemen (designSystems i brand/profile.json och film.json). Gör fas 1 (research → notes/research.md, med primärkällor) och fas 3 (manus → script/script.md) enligt skillen, i projektets läge och längd. Ersätt demon helt, även data.ts där det behövs. Låt en oberoende subagent granska manus och research mot primärkällorna och åtgärda allt som är MUST. Kör sedan python3 tools/build_timeline.py. Avsluta med en kort sammanfattning av manuset och det jag behöver godkänna.",
   },
   shots: {
     label: "Bildprompter",
     prompt:
-      "Skriv art/shots.json för filmens scener: en film-Sxx per scen (inte end-card), från scenens > visual:-rad, i profilens bildstil (art/style.json). Ta bort demons bilder ur shots.json. Behöver profilen en återkommande figur som saknas, föreslå det i stället för att lägga till den. Kör inte gen.py, det gör jag i appen.",
+      "Skriv art/shots.json för filmens scener: en film-Sxx per scen (inte end-card), från scenens > visual:-rad, i profilens bildstil (art/style.json) och de länkade designsystemens bildspråk. Ta bort demons bilder ur shots.json. Behöver profilen en återkommande figur som saknas, föreslå det i stället för att lägga till den. Kör inte gen.py, det gör jag i appen.",
   },
   scenes: {
     label: "Bygg scenerna",
     prompt:
-      "Gör fas 7: ta bort demoscenerna (TheYear, TheRule) och bygg filmens scener, de bärande först. Lägg siffror i data.ts med källa. Lägg ut scenerna efter WIN och WIDE så att de fungerar i alla format i film.json, och kontrollera stillbilder i varje format. Kör lint_cues och tsc. Avsluta med en rad per scen om vad som syns.",
+      "Gör fas 7 och följ de länkade designsystemen: ta bort demoscenerna (TheYear, TheRule) och bygg filmens scener, de bärande först. Lägg siffror i data.ts med källa. Lägg ut scenerna efter WIN och WIDE så att de fungerar i alla format i film.json, och kontrollera stillbilder i varje format. Kör lint_cues och tsc. Avsluta med en rad per scen om vad som syns.",
   },
   review: {
     label: "Granska scenerna",

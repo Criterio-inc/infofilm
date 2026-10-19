@@ -4,6 +4,7 @@
   "language": "sv",
   "locale": "sv-SE",
   "kicker": "Kundnamn",
+  "designSystems": [],
   "palette": {
     "backdrop": "#e9edf2",
     "backdropLight": "#f6f8fa",

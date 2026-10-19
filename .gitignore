@@ -1,0 +1,2 @@
+# the Infofilm app keeps its own state (Claude conversation, test stills) next to a profile
+.infofilm-app.json

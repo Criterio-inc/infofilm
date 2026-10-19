@@ -9,7 +9,7 @@ import { createProject, PRESETS, reveal, runAction, startStudio, stopStudio, sto
 import { APP_DIR, KEYS, SKILL_DIR, loadConfig, loadSecrets, saveConfig, saveSecrets, toolEnv } from "./lib/config.mjs";
 import { getJob, projectJobs, runningJob, stopAll, stopJob, summary as jobSummary } from "./lib/jobs.mjs";
 import { detail, listProfiles, listProjects, projectDir, saveApp } from "./lib/projects.mjs";
-import { createProfile, jobKey, ownRoot, previewProfile, profileClaude, profileFile, profilePrompt, readProfile, removeFile, saveProfile, upload, voiceToProfile } from "./lib/profiles.mjs";
+import { createProfile, jobKey, ownRoot, previewProfile, profileClaude, profileFile, profilePrompt, readProfile, syncPrompt, removeFile, saveProfile, upload, voiceToProfile } from "./lib/profiles.mjs";
 import { startJob } from "./lib/jobs.mjs";
 
 const PORT = Number(process.env.INFOFILM_PORT || loadConfig().port || 4747);
@@ -251,8 +251,10 @@ async function profilesApi(req, res, parts) {
   }
   if (act === "claude") {
     const b = await body(req);
-    const prompt = b.preset === "build" ? profilePrompt() + (b.extra ? `\n\nDessutom: ${b.extra}` : "") : b.prompt;
-    return json(res, 202, { job: jobSummary(profileClaude(id, prompt, b.preset === "build" ? "Claude: bygg profilen" : `Claude: ${String(prompt).slice(0, 40)}`)) });
+    const presets = { build: [profilePrompt, "Claude: bygg profilen"], sync: [syncPrompt, "Claude: synka designsystemet"] };
+    const pre = presets[b.preset];
+    const prompt = pre ? pre[0]() + (b.extra ? `\n\nDessutom: ${b.extra}` : "") : b.prompt;
+    return json(res, 202, { job: jobSummary(profileClaude(id, prompt, pre ? pre[1] : `Claude: ${String(prompt).slice(0, 40)}`)) });
   }
   if (act === "claude-reset") {
     const f = path.join(readProfile(id).dir, ".infofilm-app.json");

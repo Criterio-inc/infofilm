@@ -8,6 +8,16 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
+// the frame labels need ffmpeg's drawtext (freetype); some builds, like Homebrew's ffmpeg 9, lack it
+const LABELS = (() => {
+  try {
+    return execFileSync("ffmpeg", ["-hide_banner", "-filters"], { encoding: "utf8" }).includes(" drawtext ");
+  } catch {
+    return false;
+  }
+})();
+const label = (text, size, at) => (LABELS ? `,drawtext=text='${text}':x=${at}:y=${at}:fontsize=${size}:fontcolor=yellow:box=1:boxcolor=black@0.6` : "");
+
 const [id, framesArg, outArg] = process.argv.slice(2);
 if (!id || !framesArg) {
   console.error("usage: node tools/stills.mjs <compositionId> <f1,f2,...> [outDir]");
@@ -52,7 +62,7 @@ const cols = tall ? 4 : 2;
 const cellW = tall ? 400 : 960;
 const cellH = Math.round((cellW * composition.height) / composition.width / 2) * 2;
 const inputs = files.flatMap((f) => ["-i", f]);
-const scaled = files.map((_, i) => `[${i}]scale=${cellW}:${cellH},drawtext=text='${done[i]}':x=12:y=12:fontsize=28:fontcolor=yellow:box=1:boxcolor=black@0.6[s${i}]`);
+const scaled = files.map((_, i) => `[${i}]scale=${cellW}:${cellH}${label(done[i], 28, 12)}[s${i}]`);
 const pad = files.length % cols ? Array.from({ length: cols - (files.length % cols) }, (_, k) => `color=black:s=${cellW}x${cellH}:d=1[pad${k}]`) : [];
 const cells = files.map((_, i) => `[s${i}]`).concat(pad.map((_, k) => `[pad${k}]`));
 const rows = [];

@@ -1,5 +1,6 @@
 // Film projects in the films folder: listing, status, and the actions the app can run on one.
 import { appendFileSync, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { loadConfig, SKILL_DIR } from "./config.mjs";
 
@@ -21,6 +22,22 @@ const readJson = (f, fallback = null) => {
 };
 
 export const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/** Design systems (Claude Design, the web, or a folder on this computer), from a textarea or a list,
+ * as [{ url, name?, syncedAt?, file? }]: url is a link (https://…) or a folder (~/… or /…).
+ * What is already known about one (its name, when it was synced, its snapshot) is kept. */
+export function designLinks(input, current = []) {
+  const known = new Map((current || []).map((d) => (typeof d === "string" ? { url: d } : d)).filter((d) => d?.url).map((d) => [d.url, d]));
+  const raw = Array.isArray(input) ? input.map((d) => (typeof d === "string" ? d : d?.url)) : String(input || "").split(/\n+/);
+  const urls = [...new Set(raw.map((u) => String(u || "").trim().replace(/\/+$/, "")).filter(Boolean))];
+  const bad = urls.find((u) => !/^https?:\/\/[^\s/]+\.\S+$/i.test(u) && !/^(~|\/)\S/.test(u));
+  if (bad) throw Object.assign(new Error(`"${bad.slice(0, 80)}" är varken en webblänk (https://…) eller en mapp (~/… eller /…)`), { status: 400 });
+  return urls.map((url) => known.get(url) || { url });
+}
+
+/** The folders among a profile's or film's design systems, with ~ expanded (Claude may read them). */
+export const designFolders = (list) =>
+  (list || []).map((d) => (typeof d === "string" ? d : d?.url)).filter((u) => /^(~|\/)/.test(u || "")).map((u) => (u.startsWith("~") ? path.join(os.homedir(), u.slice(1)) : u)).filter((p) => existsSync(p));
 
 /** The project folder for an id, or a 404. Ids are folder names directly under the films folder. */
 export function projectDir(id) {
@@ -48,10 +65,11 @@ export function listProfiles() {
         formats: p.formats || null,
         palette: { band: p.palette?.band, primary: p.palette?.primary, accent: p.palette?.accent, surface: p.palette?.surfaceLight, backdrop: p.palette?.backdrop },
         placeholder: /PLACEHOLDER/i.test(p._doc || ""),
+        designSystems: (p.designSystems || []).length,
       });
     }
   }
-  return [...out.values()].sort((a, b) => (a.id === "criterio" ? -1 : b.id === "criterio" ? 1 : a.template - b.template || a.name.localeCompare(b.name, "sv")));
+  return [...out.values()].sort((a, b) => (a.id === "critero" ? -1 : b.id === "critero" ? 1 : a.template - b.template || a.name.localeCompare(b.name, "sv")));
 }
 
 export function profileDir(id) {
@@ -203,6 +221,7 @@ export function writeBrief(dir, b) {
     "",
     b.notes || "",
     "",
+    ...(b.designSystems?.length ? ["## Designsystem för den här filmen", "", "Utöver kundens (brand/profile.json). Läs dem före manus, bildprompter och scener.", "", ...b.designSystems.map((d) => `- ${d.url}`), ""] : []),
   ];
   writeFileSync(path.join(dir, "notes/brief.md"), lines.join("\n"));
 }

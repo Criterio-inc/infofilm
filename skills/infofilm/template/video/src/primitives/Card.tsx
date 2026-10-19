@@ -1,7 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Img, interpolate, staticFile } from "remotion";
 import { ease, pop, prog } from "../anim";
-import { DISPLAY_FONT, DISPLAY_EM, DISPLAY_UPPER, UI } from "../fonts";
+import { DISPLAY_FONT, DISPLAY_EM, DISPLAY_UPPER, MONO, MONO_WEIGHT, UI } from "../fonts";
 import { BRAND, C, CAPTION_H, CAPTION_SIZE, CARD, PLATE, S, TITLE_H, WIN } from "../theme";
 import { useScene } from "../timing";
 
@@ -44,7 +44,7 @@ export const Card: React.FC<{
   const shown = DISPLAY_UPPER ? (title ?? "").toUpperCase() : (title ?? "");
   const logoH = BRAND.logo ? Math.round((BRAND.logo.height ?? 56) * S) : 0;
   // the title shrinks so that title, kicker and logo keep one line
-  const titleRoom = CARD.w * 0.62 - (BRAND.logo ? logoH * 3 : 0);
+  const titleRoom = CARD.w * 0.62 - (BRAND.logo ? logoH * (BRAND.logo.aspect ?? 3) : 0);
 
   return (
     <AbsoluteFill style={move}>
@@ -114,7 +114,7 @@ export const Card: React.FC<{
           )}
           <div style={{ display: "flex", alignItems: "center", gap: Math.round(28 * S) }}>
             {kicker && (
-              <div style={{ fontFamily: UI, fontWeight: 600, fontSize: Math.round(26 * S), letterSpacing: "0.14em", color: C.kicker, textTransform: "uppercase", whiteSpace: "nowrap" }}>
+              <div style={{ fontFamily: MONO, fontWeight: MONO_WEIGHT, fontSize: Math.round(26 * S), letterSpacing: "0.14em", color: C.kicker, textTransform: "uppercase", whiteSpace: "nowrap" }}>
                 {kicker}
               </div>
             )}

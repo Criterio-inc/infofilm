@@ -6,7 +6,7 @@ import path from "node:path";
 import { claudeStep } from "./claude.mjs";
 import { HOME_DIR, SKILL_DIR, loadConfig } from "./config.mjs";
 import { startJob } from "./jobs.mjs";
-import { SAFE_ID, listProfiles } from "./projects.mjs";
+import { SAFE_ID, designLinks, listProfiles } from "./projects.mjs";
 
 const PREVIEW = path.join(HOME_DIR, "preview");
 const readJson = (f, fb = null) => {
@@ -92,6 +92,7 @@ export function saveProfile(id, b) {
     for (const k of ["name", "kicker", "language", "locale", "formats", "motion", "backdrop", "filmLook", "ground"]) if (k in b.profile) next[k] = b.profile[k];
     for (const k of ["palette", "card", "plate", "endCard"]) if (b.profile[k]) next[k] = { ...(cur[k] || {}), ...b.profile[k] };
     if ("logo" in b.profile) next.logo = b.profile.logo;
+    if ("designSystems" in b.profile) next.designSystems = designLinks(b.profile.designSystems, cur.designSystems);
     if (b.profile.fonts) {
       next.fonts = { ...(cur.fonts || {}) };
       for (const [role, spec] of Object.entries(b.profile.fonts)) next.fonts[role] = { ...(cur.fonts?.[role] || {}), ...spec };
@@ -183,8 +184,24 @@ export function profileClaude(id, prompt, title) {
 }
 
 export const profilePrompt = () => PROFILE_PROMPT.replace("<skill>", SKILL_DIR);
+export const syncPrompt = () => SYNC_PROMPT.replace("<skill>", SKILL_DIR);
 const PROFILE_PROMPT =
-  "Bygg den här kundprofilen från kundens material: allt i material/ (grafisk manual, loggor, exempel, presentationer), länkarna i material/LINKS.md och anteckningarna i NOTES.md. Läs skillens profiles/README.md och references/style.md först. Fyll i profile.json (färger per roll, typsnitt, logga, kortform, rörelse, slutkort), style.json (bildstilen för illustrationerna och never-listan), design.json (berättarrösten) och NOTES.md (tonalitet, tilltal, ord, regler). Ta färger, typsnitt och logga ur materialet, gissa aldrig: det som saknas skriver du som en fråga sist i NOTES.md och i ditt svar. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Kör sedan python3 <skill>/template/tools/fetch_fonts.py . för Google-typsnitten. Avsluta med en kort sammanfattning av profilen och vad du behöver från mig.";
+  "Bygg den här kundprofilen från kundens material: allt i material/ (grafisk manual, loggor, exempel, presentationer), länkarna i material/LINKS.md och anteckningarna i NOTES.md. Läs skillens profiles/README.md och references/style.md först. Fyll i profile.json (färger per roll, typsnitt, logga, kortform, rörelse, slutkort), style.json (bildstilen för illustrationerna och never-listan), design.json (berättarrösten) och NOTES.md (tonalitet, tilltal, ord, regler). Ta färger, typsnitt och logga ur materialet, gissa aldrig: det som saknas skriver du som en fråga sist i NOTES.md och i ditt svar. Finns det länkar i designSystems i profile.json, läs varje designsystem (eller dess ögonblicksbild i design-systems/) och synka in dess tokens enligt avsnittet ”Design systems” i profiles/README.md. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Kör sedan python3 <skill>/template/tools/fetch_fonts.py . för Google-typsnitten. Avsluta med en kort sammanfattning av profilen och vad du behöver från mig.";
+
+/** The newest change in the skill's template (its code, not node_modules or renders). */
+function templateStamp(dir = path.join(SKILL_DIR, "template")) {
+  let newest = 0;
+  for (const name of readdirSync(dir)) {
+    if (name === "node_modules" || name.startsWith(".")) continue;
+    const f = path.join(dir, name);
+    const st = statSync(f);
+    newest = Math.max(newest, st.isDirectory() ? templateStamp(f) : st.mtimeMs);
+  }
+  return Math.round(newest);
+}
+
+const SYNC_PROMPT =
+  "Synka kundens designsystem in i profilen. Läs skillens profiles/README.md, avsnittet \"Design systems\". Läs varje länk i \"designSystems\" i profile.json: med verktyget Artifact (action read) om det är en claude.ai-länk, annars med WebFetch. Spara det du läste som en ögonblicksbild i design-systems/<kortnamn>.md (tokens med värden, typografi, form, bildspråk och tonalitet, och länken och datumet överst) och peka på den med \"file\" på länken. Mappa designsystemets tokens till profilens roller: färger till palette, typsnitt till fonts, hörnradie, kantlinjer och skuggor till card och plate, och bildspråk eller tonalitet till style.json och NOTES.md. Gissa inget: det som inte framgår skriver du som en fråga sist i NOTES.md. Skriv namnet, dagens datum (syncedAt) och ögonblicksbildens sökväg (file) på varje länk i designSystems, och en tabell i NOTES.md under \"Designsystem\" som visar vilken token som blev vilken roll och vad som skiljer mot hur profilen såg ut förut. Kontrollera kontrasten (bandText på band, ink på surfaceLight, minst 4,5:1). Har typsnitten ändrats, kör python3 <skill>/template/tools/fetch_fonts.py . Avsluta med en kort sammanfattning av vad som ändrades.";
 
 /** Test stills: one small preview film (made once), switched to this profile, stills per format. */
 export function previewProfile(id) {
@@ -194,8 +211,12 @@ export function previewProfile(id) {
   const steps = [];
   if (!existsSync(path.join(p.dir, "fonts/google.json")))
     steps.push({ label: "Typsnitt", cmd: "python3", args: [path.join(SKILL_DIR, "template/tools/fetch_fonts.py"), p.dir], cwd: p.dir });
+  // the test film is made once, and made again when the skill's template has changed since
+  const stamp = String(templateStamp());
+  const stampFile = path.join(PREVIEW, ".template-stamp");
+  if (existsSync(PREVIEW) && readText(stampFile).trim() !== stamp) rmSync(PREVIEW, { recursive: true, force: true });
   if (!existsSync(path.join(PREVIEW, "film.json")))
-    steps.push({ label: "Testfilm (första gången, ca en minut)", cmd: "bash", args: [path.join(SKILL_DIR, "scripts/new_film.sh"), PREVIEW, "--profile", p.dir, "--mode", "klipp", "--format", formats, "--slug", "test", "--title", "Test"], cwd: SKILL_DIR, parse: (l) => (/npm notice/.test(l) ? null : l) });
+    steps.push({ label: "Testfilm (första gången, ca en minut)", cmd: "bash", args: [path.join(SKILL_DIR, "scripts/new_film.sh"), PREVIEW, "--profile", p.dir, "--mode", "klipp", "--format", formats, "--slug", "test", "--title", "Test"], cwd: SKILL_DIR, parse: (l) => (/npm notice/.test(l) ? null : l), after: () => writeFileSync(stampFile, stamp + "\n") });
   steps.push({ label: "Profilen i testfilmen", cmd: "python3", args: [path.join(SKILL_DIR, "scripts/apply_profile.py"), p.dir, PREVIEW, "--formats", formats], cwd: PREVIEW });
   const fmts = formats.split(",");
   for (const fmt of fmts) {

@@ -17,7 +17,7 @@ export type Brand = {
   backdrop?: "starbursts" | "plain";
   filmLook?: boolean;
   ground?: "starburst" | "soft";
-  logo: { src: string; height?: number } | null;
+  logo: { src: string; height?: number; aspect?: number } | null;
   endCard?: { line?: string; url?: string };
 };
 
