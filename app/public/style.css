@@ -164,3 +164,6 @@ dialog.ask p { white-space: pre-line; }
 .vrow.on { background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
 .vrow audio { width: 240px; }
 @media (max-width: 700px) { .vrow { grid-template-columns: 1fr; } .vrow audio { width: 100%; } }
+.answer h4 { margin: 14px 0 4px; font-size: 14px; }
+.answer h4:first-child { margin-top: 0; }
+.proposal { max-height: 560px; overflow: auto; padding-right: 6px; }

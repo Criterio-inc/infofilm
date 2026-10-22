@@ -49,13 +49,25 @@ const swatch = (p = {}) => `<span class="swatch">${[p.band, p.primary, p.accent,
 /** Just enough Markdown for Claude's answers: paragraphs, lists, **bold**, `code`. */
 const md = (t) =>
   esc(t)
+    // a heading is a block of its own, also when the text runs on below it
+    .replace(/^#{1,4} (.+)$/gm, "\n\n\u0001$1\n\n")
     .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
     .map((block) =>
-      /^\s*[-*] /m.test(block) ? `<ul>${block.split("\n").filter(Boolean).map((l) => `<li>${l.replace(/^\s*[-*] /, "")}</li>`).join("")}</ul>` : `<p>${block.replace(/\n/g, "<br>")}</p>`,
+      block.startsWith("\u0001")
+        ? `<h4>${block.slice(1)}</h4>`
+        : /^\s*[-*] /m.test(block)
+          ? // a line before the list ("Alternativ:") stays a line of text, not a bullet
+            block.split("\n").filter(Boolean).map((l) => (/^\s*[-*] /.test(l) ? `<li>${l.replace(/^\s*[-*] /, "")}</li>` : `<p>${l}</p>`)).join("").replace(/(<li>.*?<\/li>)+/g, (m) => `<ul>${m}</ul>`)
+          : `<p>${block.replace(/\n/g, "<br>")}</p>`,
     )
     .join("");
+// what "Utgå från ett dokument" takes (the server converts the office formats with LibreOffice)
+const DOC_ACCEPT = ".pptx,.ppt,.key,.odp,.pdf,.docx,.doc,.odt,.rtf,.pages,.txt,.md";
+const sizeText = (n) => (n < 1e6 ? `${Math.max(1, Math.round(n / 1e3))} kB` : `${(n / 1e6).toFixed(1).replace(".", ",")} MB`);
 const modeName = (m) => (m === "klipp" ? "Klipp" : "Film");
 // a film's mood: how it feels within the sender's frame (value, label, what it means)
 const MOODS = [
@@ -163,6 +175,9 @@ function newPage(preselect) {
           <div><label>Syfte <span class="hint">– det tittaren ska ta med sig</span></label><input type="text" name="purpose"></div>
         </div>
         <label>Underlag <span class="hint">– länkar, siffror, källor, vad som måste med eller inte får sägas</span></label><textarea name="notes"></textarea>
+        <label>Utgå från ett dokument <span class="hint">– valfritt: en presentation, en PDF eller ett Word-dokument som Claude läser och gör filmen av</span></label>
+        <input type="file" id="newdocs" multiple accept="${DOC_ACCEPT}">
+        <div class="small muted" id="docinfo" style="margin-top:4px">Claude läser varje sida och talaranteckningarna, och föreslår vad filmen ska säga innan manuset skrivs. Keynote och Pages: spara som PDF eller PowerPoint först.</div>
       </div>
       <div>
         <h2>Stämning</h2>
@@ -177,7 +192,7 @@ function newPage(preselect) {
         <label>Bakgrundsmusik <span class="hint">– en lugn slinga lågt under rösten, eller ingen</span></label><select name="music" id="musicsel"></select>
         <label>Designsystem <span class="hint">– valfritt: länkar eller mappar för just den här filmen, utöver avsändarens (en per rad). Claude läser dem före manus, bildprompter och scener.</span></label><textarea name="designSystems" rows="2" placeholder="https://claude.ai/…"></textarea>
       </div>
-      <label class="row" style="font-weight:400"><input type="checkbox" name="startClaude" checked> Låt Claude börja direkt med research och manus (kostar inget extra utöver ditt Claude-abonnemang)</label>
+      <label class="row" style="font-weight:400"><input type="checkbox" name="startClaude" checked> <span id="startlbl">Låt Claude börja direkt med research och manus (kostar inget extra utöver ditt Claude-abonnemang)</span></label>
       <div class="row"><button class="primary" type="submit">Skapa filmen</button><span class="muted small" id="newstatus"></span></div>
       <div id="newlog"></div>
     </form>`;
@@ -198,6 +213,17 @@ function newPage(preselect) {
     $("#profinfo").innerHTML = p ? `${swatch(p.palette)} ${p.placeholder ? `<span class="warn">Profilen har platshållare för färger och logga – fyll i den innan filmen ska ut.</span>` : esc(p.language || "")}${ds}` : "";
   };
   f.endLine.addEventListener("input", () => (f.endLine.dataset.touched = "1"));
+  const docs = () => [...$("#newdocs").files];
+  $("#newdocs").addEventListener("change", () => {
+    const d = docs();
+    // with a document the topic can come from it, and Claude starts by reading it
+    f.topic.required = !d.length;
+    f.topic.placeholder = d.length ? "Valfritt: Claude föreslår ämnet ur dokumentet" : "Hur kommunens budget fördelas och vad som ändras 2027";
+    $("#startlbl").textContent = d.length ? "Låt Claude läsa dokumentet direkt och föreslå filmens budskap (kostar inget extra utöver ditt Claude-abonnemang)" : "Låt Claude börja direkt med research och manus (kostar inget extra utöver ditt Claude-abonnemang)";
+    $("#docinfo").innerHTML = d.length
+      ? `${d.map((x) => `${esc(x.name)} <span class="muted">${sizeText(x.size)}</span>`).join(" · ")}<br>Innehållet skickas till Claude. Filerna ligger kvar i filmens mapp och hamnar aldrig på GitHub.${d.some((x) => /\.(key|pages)$/i.test(x.name)) ? ` <span class="warn">Keynote och Pages går inte alltid att läsa: spara som PDF eller PowerPoint om det strular.</span>` : ""}`
+      : "Claude läser varje sida och talaranteckningarna, och föreslår vad filmen ska säga innan manuset skrivs. Keynote och Pages: spara som PDF eller PowerPoint först.";
+  });
   f.addEventListener("change", (e) => {
     if (e.target.name === "mode") lengths();
     if (e.target.name === "profile") prof();
@@ -212,12 +238,32 @@ function newPage(preselect) {
     b.slug = b.title;
     b.startClaude = fd.has("startClaude");
     if (!b.formats.length) return toast("Välj minst ett format");
+    const d = docs();
+    if (d.some((x) => x.size > 60e6)) return toast("Ett dokument är för stort (högst 60 MB per fil)");
+    // a film from a document: the files go in once the project exists, then Claude reads them (not research)
+    const readDoc = d.length > 0 && b.startClaude;
+    if (d.length) {
+      b.startClaude = false;
+      if (!String(b.topic || "").trim()) b.topic = `Det som dokumentet ${list(d.map((x) => x.name))} handlar om`;
+    }
     f.querySelector("button[type=submit]").disabled = true;
     try {
       const { id, job } = await api("projects", { body: b });
       $("#newstatus").textContent = "Skapar projektet (installerar verktygen, ca en minut) …";
-      watchJob(job.id, $("#newlog"), (status) => {
-        if (status === "done") location.hash = `#/p/${encodeURIComponent(id)}`;
+      watchJob(job.id, $("#newlog"), async (status) => {
+        if (status === "done" && d.length) {
+          const pid = encodeURIComponent(id);
+          try {
+            for (const x of d) {
+              $("#newstatus").textContent = `Laddar upp ${x.name} …`;
+              await api(`projects/${pid}/documents`, { body: { name: x.name, data: await fileToBase64(x) } });
+            }
+            if (readDoc) await api(`projects/${pid}/documents-read`, { body: {} });
+          } catch (err) {
+            toast(`${err.message}. Lägg till dokumentet i steget Manus.`);
+          }
+          location.hash = `#/p/${pid}`;
+        } else if (status === "done") location.hash = `#/p/${encodeURIComponent(id)}`;
         else {
           $("#newstatus").innerHTML = `Det gick inte, se loggen. Projektet finns ändå: <a href="#/p/${encodeURIComponent(id)}">öppna det</a> och be Claude titta på felet, eller välj en annan titel.`;
           f.querySelector("button[type=submit]").disabled = false;
@@ -346,7 +392,7 @@ async function jobText(jobId) {
 
 const stepOf = (title) =>
   /^Uppdatera filmen/.test(title) ? null : /^Röst/.test(title) ? "voice" : /^Bilder|bildprompter/i.test(title) ? "images" : /Snabbförhandsvisning|Stillbilder|bygg scenerna|granska|Musikprompt|^Musik/i.test(title) ? "review"
-  : /^Rendera/.test(title) ? "deliver" : /research och manus/i.test(title) ? "script" : null;
+  : /^Rendera/.test(title) ? "deliver" : /research och manus|^Läs dokumentet/i.test(title) ? "script" : null;
 const kr = (n) => new Intl.NumberFormat("sv-SE").format(n);
 const list = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} och ${xs[xs.length - 1]}` : xs[0] || "");
 
@@ -357,6 +403,8 @@ async function projectPage(id) {
   const cur = p.steps.current === "done" ? "deliver" : p.steps.current;
   const view = viewStep[id] || cur;
   const done = Object.fromEntries(p.steps.list.map((s) => [s.key, s.done]));
+  // while Claude's proposal from the document waits for a yes, a wish changes the proposal, not a script
+  const docPending = view === "script" && (p.documents?.files || []).length > 0 && (p.demo || !p.scenes.length) && p.documents.proposal && !p.documents.approved && !p.documents.unread;
   const order = p.steps.list.map((s) => s.key);
   const before = order.slice(0, order.indexOf(view)).filter((k) => !done[k]);
   const illus = p.scenes.filter((s) => s.name !== "end-card");
@@ -380,8 +428,27 @@ async function projectPage(id) {
   const run = (attrs, label, primary = true) => `<button ${primary ? 'class="primary"' : ""} ${attrs} ${busy ? "disabled" : ""}>${esc(label)}</button>`;
 
   if (view === "script") {
-    if (p.demo || !p.scenes.length) {
+    // a film made from a document: Claude reads it and proposes the message before there is a script
+    const doc = p.documents || { files: [] };
+    const hasDoc = doc.files.length > 0;
+    const noScript = p.demo || !p.scenes.length;
+    const proposal = doc.proposal ? `<div class="answer proposal">${md(doc.proposal)}</div>` : "";
+    if (noScript && hasDoc && (doc.unread || !doc.proposal)) {
+      card.title = "Låt Claude läsa dokumentet";
+      card.text = doc.proposal
+        ? "Du har lagt till eller ändrat dokument efter Claudes förslag. Låt Claude läsa allt igen, så att förslaget täcker det."
+        : "Claude läser varje sida och talaranteckningarna och föreslår vad filmen ska säga. Du läser förslaget innan manuset skrivs.";
+      card.facts = [doc.files.length === 1 ? "Ett dokument" : `${doc.files.length} dokument`, "Tar några minuter", "Ingår i ditt Claude-abonnemang"];
+      card.main = run("data-docread", "Läs dokumentet");
+      card.body = proposal;
+    } else if (noScript && hasDoc && !doc.approved) {
+      card.title = "Läs Claudes förslag";
+      card.text = `Claude har läst dokumentet (${doc.pages} sidor och bilder) och föreslår budskap och scener. Vill du ändra något, skriv det i rutan nedanför. När förslaget stämmer skriver Claude manuset.`;
+      card.main = run("data-docok", "Förslaget stämmer, skriv manuset");
+      card.body = proposal;
+    } else if (noScript) {
       card.title = "Låt Claude skriva manuset";
+      if (hasDoc) card.text = "Claude skriver manuset utifrån förslaget du godkände, med dokumentet som huvudkälla. Fakta som inte står i dokumentet räknas upp, så att du kan ta ställning till dem.";
       card.facts = ["Tar några minuter", "Ingår i ditt Claude-abonnemang"];
       card.main = run('data-preset="script"', "Skriv manuset");
     } else if (!done.script) {
@@ -396,6 +463,13 @@ async function projectPage(id) {
     if (p.scenes.length && !p.demo)
       card.body = `<div class="scenes">${p.scenes.map((s) => `<div class="scene"><div class="scene-h"><b>${esc(s.title || s.name)}</b><span class="muted small">${s.seconds} s</span></div><p>${esc(s.text)}</p></div>`).join("")}</div>`;
     card.more = p.brief ? `<details><summary>Briefen</summary><div class="log-md">${esc(p.brief)}</div></details>` : "";
+    card.more += `<details style="margin-top:8px"><summary>${hasDoc ? `Dokumentet (${doc.files.length === 1 ? "ett" : doc.files.length})` : "Utgå från ett dokument"}</summary>
+      <p class="small muted">PowerPoint, PDF, Word eller text. Claude läser varje sida och talaranteckningarna. Innehållet skickas till Claude, och filerna ligger kvar i filmens mapp.</p>
+      ${doc.files.map((x) => `<div class="spread small"><span>${esc(x.name)} <span class="muted">${sizeText(x.size)}</span></span><button class="link small" data-docrm="${esc(x.name)}" ${busy ? "disabled" : ""}>Ta bort</button></div>`).join("")}
+      <div class="row" style="margin-top:8px"><label class="btn" style="margin:0">Lägg till dokument<input type="file" id="docup" multiple accept="${DOC_ACCEPT}" hidden ${busy ? "disabled" : ""}></label>
+        ${hasDoc ? `${run("data-docread", "Läs dokumentet igen", false)}<button class="link small" data-reveal="dokument">Visa i Finder</button>` : ""}</div>
+      ${doc.approved && !noScript ? `<details style="margin-top:8px"><summary>Förslaget du godkände</summary>${proposal}</details>` : ""}
+    </details>`;
   }
 
   if (view === "voice") {
@@ -547,7 +621,7 @@ async function projectPage(id) {
       </div>
       <div class="panel">
         <h2>Vill du ändra något?</h2>
-        ${CHIPS[view].length ? `<div class="chips">${CHIPS[view].map((c) => `<button class="chip" data-chip="${esc(c)}" ${busy ? "disabled" : ""}>${esc(c)}</button>`).join("")}</div>` : ""}
+        ${CHIPS[view].length ? `<div class="chips">${(docPending ? ["Färre scener", "Ett annat budskap", "Ta med mer ur dokumentet"] : CHIPS[view]).map((c) => `<button class="chip" data-chip="${esc(c)}" ${busy ? "disabled" : ""}>${esc(c)}</button>`).join("")}</div>` : ""}
         <form id="ask"><textarea name="prompt" rows="2" placeholder="Skriv med egna ord, till exempel ”Byt rubriken i scen 2 till Så fördelas pengarna”" ${busy ? "disabled" : ""}></textarea>
           <div class="row" style="margin-top:8px"><button class="primary" ${busy ? "disabled" : ""}>Be Claude</button>${p.claudeSession ? `<button type="button" class="link small" data-reset>Börja ett nytt samtal</button>` : ""}</div></form>
         ${p.claudeLast?.result ? `<details ${p.claudeLast.at > Date.now() - 3600e3 ? "open" : ""} style="margin-top:12px"><summary>Claudes senaste svar <span class="muted small">${ago(p.claudeLast.at)}</span></summary><div class="answer">${md(p.claudeLast.result)}</div></details>` : ""}
@@ -574,7 +648,11 @@ async function projectPage(id) {
       toast(e.message);
     }
   };
-  const claude = async (prompt, title) => act("claude", { prompt, title: title || `Claude: ${prompt.slice(0, 40)}${prompt.length > 40 ? "…" : ""}` });
+  const claude = async (prompt, title) =>
+    act("claude", {
+      prompt: docPending ? `Ändra förslaget i notes/dokument.md efter det här (skriv inget manus ännu, och behåll rubrikerna): ${prompt}` : prompt,
+      title: title || `Claude: ${prompt.slice(0, 40)}${prompt.length > 40 ? "…" : ""}`,
+    });
 
   app.querySelectorAll("[data-view]").forEach((b) => b.addEventListener("click", () => {
     viewStep[id] = b.dataset.view === cur ? undefined : b.dataset.view;
@@ -629,6 +707,45 @@ async function projectPage(id) {
     }
   });
   if ($("#voicepicker")) voicePicker($("#voicepicker"), p, enc, reload, busy);
+  $("#docup")?.addEventListener("change", async (e) => {
+    const fs = [...e.target.files];
+    if (fs.some((x) => x.size > 60e6)) return toast("Ett dokument är för stort (högst 60 MB per fil)");
+    try {
+      for (const x of fs) {
+        toast(`Laddar upp ${x.name} …`);
+        await api(`projects/${enc}/documents`, { body: { name: x.name, data: await fileToBase64(x) } });
+      }
+      reload();
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+  app.querySelectorAll("[data-docread]").forEach((b) => b.addEventListener("click", async () => {
+    try {
+      await api(`projects/${enc}/documents-read`, { body: {} });
+      reload();
+    } catch (e) {
+      toast(e.message);
+    }
+  }));
+  app.querySelector("[data-docok]")?.addEventListener("click", async () => {
+    try {
+      await api(`projects/${enc}/approve`, { body: { step: "document" } });
+      await api(`projects/${enc}/preset`, { body: { preset: "script" } });
+      reload();
+    } catch (e) {
+      toast(e.message);
+    }
+  });
+  app.querySelectorAll("[data-docrm]").forEach((b) => b.addEventListener("click", async () => {
+    if (!(await ask({ title: `Ta bort ${b.dataset.docrm}?`, text: "Dokumentet tas bort ur filmen. Claudes förslag och manus påverkas inte förrän du låter Claude läsa dokumenten igen.", ok: "Ta bort" }))) return;
+    try {
+      await api(`projects/${enc}/documents-remove`, { body: { name: b.dataset.docrm } });
+      reload();
+    } catch (e) {
+      toast(e.message);
+    }
+  }));
   app.querySelector("[data-delete-film]")?.addEventListener("click", async () => {
     if (!(await ask({ title: `Radera ${p.title}?`, text: "Filmen flyttas till papperskorgen och kan återställas under Inställningar tills du tömmer den.", ok: "Radera filmen" }))) return;
     try {

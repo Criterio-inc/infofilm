@@ -7,6 +7,7 @@ import http from "node:http";
 import path from "node:path";
 import { emptyTrash, listTrash, restore, trashSize } from "./lib/trash.mjs";
 import { chooseVoice, libraryVoices, myVoices, previewClip } from "./lib/voices.mjs";
+import { documents, readDocuments, removeDocument, SCRIPT_DOC, uploadDocument } from "./lib/documents.mjs";
 import { approve, createProject, deleteProject, PRESETS, reveal, revealFile, runAction, uploadAudio, startStudio, stopStudio, stopStudios, studioPort } from "./lib/actions.mjs";
 import { APP_DIR, KEYS, SKILL_DIR, checkKey, loadConfig, loadSecrets, saveConfig, saveSecrets, toolEnv } from "./lib/config.mjs";
 import { getJob, projectJobs, runningJob, stopAll, stopJob, summary as jobSummary } from "./lib/jobs.mjs";
@@ -185,7 +186,7 @@ async function api(req, res, url) {
     const id = parts[1];
     if (m === "GET" && !parts[2]) {
       const d = detail(id);
-      return json(res, 200, { ...d, jobs: projectJobs(id), running: runningJob(id) ? jobSummary(runningJob(id)) : null, studio: studioPort(id) });
+      return json(res, 200, { ...d, documents: documents(d.dir, d.approved), jobs: projectJobs(id), running: runningJob(id) ? jobSummary(runningJob(id)) : null, studio: studioPort(id) });
     }
     if (m === "POST" && parts[2] === "action") {
       const b = await body(req);
@@ -196,7 +197,9 @@ async function api(req, res, url) {
       const b = await body(req);
       const p = PRESETS[b.preset];
       if (!p) return json(res, 400, { error: "okänd förinställning" });
-      const prompt = b.extra ? `${p.prompt}\n\nDessutom: ${b.extra}` : p.prompt;
+      // a film made from a document: the script follows the approved proposal, with the document as its main source
+      const base = b.preset === "script" && documents(projectDir(id)).files.length ? `${p.prompt}\n\n${SCRIPT_DOC}` : p.prompt;
+      const prompt = b.extra ? `${base}\n\nDessutom: ${b.extra}` : base;
       return json(res, 202, { job: jobSummary(runAction(id, "claude", { title: p.label, prompt })) });
     }
     if (m === "POST" && parts[2] === "studio") {
@@ -237,6 +240,12 @@ async function api(req, res, url) {
     if (m === "POST" && parts[2] === "delete") return json(res, 200, { entry: deleteProject(id) });
     if (m === "POST" && parts[2] === "voice-choose") return json(res, 200, await chooseVoice(id, await body(req)));
     if (m === "GET" && parts[2] === "profile-diff") return json(res, 200, profileDiff(id));
+    if (m === "POST" && parts[2] === "documents") return json(res, 200, uploadDocument(id, await body(req, 8e7)));
+    if (m === "POST" && parts[2] === "documents-remove") {
+      removeDocument(id, (await body(req)).name);
+      return json(res, 200, { ok: true });
+    }
+    if (m === "POST" && parts[2] === "documents-read") return json(res, 202, { job: jobSummary(readDocuments(id, await body(req))) });
     if (m === "POST" && parts[2] === "upload-audio") {
       return json(res, 202, { job: jobSummary(uploadAudio(id, await body(req, 8e7))) });
     }

@@ -307,11 +307,11 @@ export function deleteProject(id) {
 
 /** The user approves a step (the script, the preview); it counts until what it approved changes. */
 export function approve(id, step) {
-  if (!["script", "review"].includes(step)) throw Object.assign(new Error("okänt steg"), { status: 400 });
+  if (!["document", "script", "review"].includes(step)) throw Object.assign(new Error("okänt steg"), { status: 400 });
   const f = path.join(projectDir(id), ".infofilm-app.json");
   const cur = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
   saveApp(id, { approved: { ...(cur.approved || {}), [step]: Date.now() } });
-  logLine(id, `godkänt i appen: ${step === "script" ? "manuset" : "förhandsvisningen"}`);
+  logLine(id, `godkänt i appen: ${{ document: "förslaget ur dokumentet", script: "manuset", review: "förhandsvisningen" }[step]}`);
 }
 
 /** Show one finished file selected in Finder. */
@@ -325,7 +325,7 @@ export function revealFile(id, rel) {
 
 /** Open a folder of the project in Finder (macOS) or the file manager: only the project and its known folders. */
 export function reveal(id, sub = "") {
-  if (!/^(out|music|voice|art|script|notes|brand|video)?$/.test(String(sub))) throw Object.assign(new Error("kan inte visa den mappen"), { status: 400 });
+  if (!/^(out|music|voice|art|script|notes|brand|video|dokument)?$/.test(String(sub))) throw Object.assign(new Error("kan inte visa den mappen"), { status: 400 });
   const dir = path.join(projectDir(id), sub);
   const cmd = process.platform === "darwin" ? "open" : "xdg-open";
   spawn(cmd, [existsSync(dir) ? dir : projectDir(id)], { stdio: "ignore", detached: true }).unref();
