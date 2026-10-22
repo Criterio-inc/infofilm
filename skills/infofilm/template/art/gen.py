@@ -106,7 +106,8 @@ if __name__ == "__main__":
     dry = "--dry-run" in args
     ids = [a for a in args if a != "--dry-run"]
     shots = json.loads((HERE / "shots.json").read_text(encoding="utf-8"))
-    todo = [s for s in shots if s["id"] in ids] if ids else [s for s in shots if not (OUT / f"{s['id']}.png").exists()]
+    # a scene whose picture comes from the client's document ("source") is never generated
+    todo = [s for s in shots if s["id"] in ids and not s.get("source")] if ids else [s for s in shots if not s.get("source") and not (OUT / f"{s['id']}.png").exists()]
     print(f"{len(todo)} shots, about ${len(todo) * COST:.2f}: {' '.join(s['id'] for s in todo)}")
     if dry or not todo:
         sys.exit(0)

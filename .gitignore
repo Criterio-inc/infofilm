@@ -3,3 +3,7 @@
 
 # Python caches from syntax checks and runs
 __pycache__/
+
+# your own sound clips (Suno songs, loops): a local library to upload from, never on GitHub
+ljud/
+.DS_Store
