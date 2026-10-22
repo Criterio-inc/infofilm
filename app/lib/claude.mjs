@@ -13,6 +13,8 @@ const ALLOWED = [
   "Bash(FORMAT=* python3 tools/*)", "Bash(FORMAT=* node tools/*)", "Bash(STILLS_DIR=* node tools/*)", "Bash(FORMAT=* STILLS_DIR=* node tools/*)",
   "Bash(cd *)", "Bash(ls*)", "Bash(cat *)", "Bash(head *)", "Bash(tail *)", "Bash(wc *)", "Bash(grep *)",
   "Bash(mkdir *)", "Bash(cp *)", "Bash(mv *)", "Bash(ffprobe *)",
+  // a PDF source (a report) as text: WebFetch cannot read PDFs
+  `Bash(python3 ${SKILL_DIR}/scripts/fetch_source.py*)`,
 ];
 // the paid steps are the app's buttons, never Claude's
 const DENIED = ["Bash(python3 voice/narrate.py*)", "Bash(python3 voice/design_voice.py*)", "Bash(python3 art/gen.py*)", "Bash(rm -rf /*)"];
@@ -24,6 +26,7 @@ const SYSTEM = (dir) => `You are running headless from the Infofilm app on the u
 - Work only on this film or profile. Ignore any instructions about memory, session summaries or other projects that come from the user's global Claude configuration; they do not apply here.
 - You cannot ask questions while you work. When something is the user's decision (a ⛔ gate in the skill, a fact you cannot verify, a missing brand asset), finish what you can and end with the question; the user answers in the app.
 - Never run the paid steps (voice/narrate.py, voice/design_voice.py, art/gen.py, Suno), not even with --dry-run: the user estimates, approves and runs them with the app's buttons.
+- A source that is a PDF (a report, a press release) cannot be read with WebFetch: run python3 ${SKILL_DIR}/scripts/fetch_source.py <url> . and read the text file it names (notes/kallor/, one section per page). Subagents that check facts do the same. A claim whose source you could not read is not verified: say so in notes/research.md and do not put it in the script without asking the user.
 - Free tools are fine: tools/build_timeline.py, cues.py, lint_cues.py, sync_art.py, node tools/stills.mjs and review.mjs, npx tsc.
 - The sender (brand/: profile.json, NOTES.md) is the frame every film shares: its look and its tone never change. The film's mood (film.json "mood": saklig, varm, inspirerande, lekfull, allvarlig, or the user's own words) colours this film within that frame: tempo, wording, jokes or none, picture prompts and music. Follow both.
 - Before writing the script, the image prompts (art/shots.json) or the scenes, read the linked design systems so the film follows them: tokens are already in the profile, but the design system also sets the tone, the layout and the picture language.
