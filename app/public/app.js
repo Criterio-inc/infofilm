@@ -68,6 +68,11 @@ const md = (t) =>
 // what "Utgå från ett dokument" takes (the server converts the office formats with LibreOffice)
 const DOC_ACCEPT = ".pptx,.ppt,.key,.odp,.pdf,.docx,.doc,.odt,.rtf,.pages,.txt,.md";
 const sizeText = (n) => (n < 1e6 ? `${Math.max(1, Math.round(n / 1e3))} kB` : `${(n / 1e6).toFixed(1).replace(".", ",")} MB`);
+// the pages a scene rests on, as small page pictures (a click makes one big)
+const docRefs = (id, refs) =>
+  refs?.length ? `<div class="docrefs">${refs.map((r) => (r.img ? `<figure data-zoom><img loading="lazy" src="${fileUrl(id, r.img)}" alt=""><figcaption>${esc(r.label)}</figcaption></figure>` : `<span class="small muted">${esc(r.label)}</span>`)).join("")}</div>` : "";
+document.addEventListener("click", (e) => e.target.closest?.("[data-zoom]")?.classList.toggle("zoomed"));
+const pageWord = (x) => (x.pages?.length ? `${/\.(pptx?|odp|key)$/i.test(x.doc) ? "bild" : "sida"} ${x.pages.join(", ")}` : "i dokumentet");
 const modeName = (m) => (m === "klipp" ? "Klipp" : "Film");
 // a film's mood: how it feels within the sender's frame (value, label, what it means)
 const MOODS = [
@@ -461,13 +466,17 @@ async function projectPage(id) {
       card.main = goNext;
     }
     if (p.scenes.length && !p.demo)
-      card.body = `<div class="scenes">${p.scenes.map((s) => `<div class="scene"><div class="scene-h"><b>${esc(s.title || s.name)}</b><span class="muted small">${s.seconds} s</span></div><p>${esc(s.text)}</p></div>`).join("")}</div>`;
+      card.body = `${hasDoc && doc.outside ? `<div class="outside"><b>Fakta som inte står i dokumentet</b><p class="small muted" style="margin:4px 0 0">Claude har lagt till det här från andra källor. ${done.script ? "Du godkände det med manuset." : "Godkänner du manuset godkänner du också det. Vill du ta bort något, skriv det i rutan nedanför."}</p><div class="answer">${md(doc.outside)}</div></div>` : ""}
+        <div class="scenes">${p.scenes.map((s) => `<div class="scene"><div class="scene-h"><b>${esc(s.title || s.name)}</b><span class="muted small">${s.seconds} s</span></div><p>${esc(s.text)}</p>${docRefs(id, doc.refs?.[s.id])}</div>`).join("")}</div>`;
     card.more = p.brief ? `<details><summary>Briefen</summary><div class="log-md">${esc(p.brief)}</div></details>` : "";
     card.more += `<details style="margin-top:8px"><summary>${hasDoc ? `Dokumentet (${doc.files.length === 1 ? "ett" : doc.files.length})` : "Utgå från ett dokument"}</summary>
       <p class="small muted">PowerPoint, PDF, Word eller text. Claude läser varje sida och talaranteckningarna. Innehållet skickas till Claude, och filerna ligger kvar i filmens mapp.</p>
       ${doc.files.map((x) => `<div class="spread small"><span>${esc(x.name)} <span class="muted">${sizeText(x.size)}</span></span><button class="link small" data-docrm="${esc(x.name)}" ${busy ? "disabled" : ""}>Ta bort</button></div>`).join("")}
       <div class="row" style="margin-top:8px"><label class="btn" style="margin:0">Lägg till dokument<input type="file" id="docup" multiple accept="${DOC_ACCEPT}" hidden ${busy ? "disabled" : ""}></label>
         ${hasDoc ? `${run("data-docread", "Läs dokumentet igen", false)}<button class="link small" data-reveal="dokument">Visa i Finder</button>` : ""}</div>
+      ${doc.pictures?.length ? `<h3 style="margin:14px 0 4px">Bilder i dokumentet</h3>
+        <p class="small muted" style="margin:0 0 8px">Diagram och siffror ritas om i avsändarens stil. Foton och illustrationer ur dokumentet får bara komma med i filmen om avsändaren äger rätten till dem: kryssa i dem här, så kan du välja dem i steget Bilder.</p>
+        <div class="thumbs docthumbs">${doc.pictures.map((x) => `<figure><img loading="lazy" src="${fileUrl(id, x.file)}" alt=""><figcaption>${esc(pageWord(x))} · ${x.width}×${x.height}${x.usedBy.length ? ` · i scen ${esc(x.usedBy.join(", "))}` : ""}<label class="row small" style="font-weight:400;margin:4px 0 0;gap:6px"><input type="checkbox" data-owned="${esc(x.file)}" ${x.owned ? "checked" : ""} ${busy ? "disabled" : ""}> Vi äger rätten</label></figcaption></figure>`).join("")}</div>` : ""}
       ${doc.approved && !noScript ? `<details style="margin-top:8px"><summary>Förslaget du godkände</summary>${proposal}</details>` : ""}
     </details>`;
   }
@@ -531,9 +540,23 @@ async function projectPage(id) {
     } else {
       card.title = "Titta på bilderna";
       card.text = "Gör om en bild som inte blev bra. Siffror och text läggs på i nästa steg.";
-      card.body = `<div class="thumbs big">${illus.map((s) => `<figure><img loading="lazy" src="${fileUrl(id, s.img)}" alt=""><figcaption class="spread"><span>${esc(s.title || s.id)}</span><button class="link small" data-redo="film-${esc(s.id)}" ${busy ? "disabled" : ""}>Gör om</button></figcaption></figure>`).join("")}</div>`;
+      card.body = `<div class="thumbs big">${illus.map((s) => `<figure><img loading="lazy" src="${fileUrl(id, s.img)}" alt=""><figcaption class="spread"><span>${esc(s.title || s.id)}</span>${shotOf(s)?.source ? `<span class="small muted">ur dokumentet</span>` : `<button class="link small" data-redo="film-${esc(s.id)}" ${busy ? "disabled" : ""}>Gör om</button>`}</figcaption></figure>`).join("")}</div>`;
       card.main = goNext;
     }
+  }
+
+  if (view === "images" && illus.length && p.documents?.pictures?.length) {
+    const own = p.documents.pictures.filter((x) => x.owned);
+    card.more += own.length
+      ? `<details style="margin-top:8px" ${illus.some((s) => shotOf(s)?.source) ? "open" : ""}><summary>Bilder ur dokumentet (${own.length})</summary>
+        <p class="small muted">Välj en bild som avsändaren äger rätten till i stället för en ny från Gemini. Den kostar inget.</p>
+        <div class="stack">${illus.map((s) => {
+          const src = shotOf(s)?.source || "";
+          const cur = own.find((x) => x.file === src);
+          return `<div class="row docpick">${cur ? `<img src="${fileUrl(id, cur.file)}" alt="">` : `<span class="docpick-empty"></span>`}<span style="flex:1;min-width:140px"><b>${esc(s.title || s.id)}</b></span>
+            <select data-usepic="${esc(s.id)}" ${busy ? "disabled" : ""}><option value="">Ny bild från Gemini</option>${own.map((x) => `<option value="${esc(x.file)}" ${x.file === src ? "selected" : ""}>${esc(pageWord(x))}: ${esc(x.file.split("/").pop())}${x.width < 1200 ? " (liten)" : ""}</option>`).join("")}</select></div>`;
+        }).join("")}</div></details>`
+      : `<p class="small muted" style="margin-top:8px">Dokumentet har ${p.documents.pictures.length === 1 ? "en bild" : `${p.documents.pictures.length} bilder`}. Kryssa i under Manus → Dokumentet vilka avsändaren äger rätten till, så kan du använda dem här i stället för nya bilder.</p>`;
   }
 
   if (view === "review") {
@@ -574,6 +597,9 @@ async function projectPage(id) {
         <ol class="small" style="margin:10px 0 0;padding-left:18px"><li>Öppna Suno, välj <b>Create → Advanced</b> och lämna <b>Lyrics</b> tom, då blir låten instrumental.</li><li>Klistra in <b>Styles</b>, <b>Song Title</b> och under <b>More Options</b> <b>Exclude styles</b> och <b>Duration</b>.</li><li>Tryck <b>Create</b>, lyssna och ladda ner tagningen du gillar (WAV eller MP3).</li><li>Tryck <b>Ladda upp eget ljud</b> ovan och välj filen. Gör sedan en ny snabbversion.</li></ol>
         <div class="row" style="margin-top:8px"><a class="btn" href="https://suno.com/create" target="_blank" rel="noopener">Öppna Suno ↗</a></div>` : ""}
     </div>`;
+    const refScenes = p.scenes.filter((s) => p.documents?.refs?.[s.id]?.length);
+    if (refScenes.length)
+      card.more += `<details style="margin-top:8px"><summary>Sidorna i dokumentet som scenerna bygger på</summary><div class="scenes">${refScenes.map((s) => `<div class="scene"><div class="scene-h"><b>${esc(s.title || s.name)}</b></div>${docRefs(id, p.documents.refs[s.id])}</div>`).join("")}</div></details>`;
     if (p.preview) card.body = `<video id="previewvid" controls preload="metadata" src="${fileUrl(id, p.preview.path, p.preview.mtime)}"></video>`;
   }
 
@@ -720,6 +746,24 @@ async function projectPage(id) {
       toast(err.message);
     }
   });
+  app.querySelectorAll("[data-owned]").forEach((c) => c.addEventListener("change", async () => {
+    try {
+      await api(`projects/${enc}/documents-rights`, { body: { file: c.dataset.owned, owned: c.checked } });
+      reload();
+    } catch (e) {
+      c.checked = !c.checked;
+      toast(e.message);
+    }
+  }));
+  app.querySelectorAll("[data-usepic]").forEach((sel) => sel.addEventListener("change", async () => {
+    try {
+      await api(`projects/${enc}/documents-use`, { body: { scene: sel.dataset.usepic, file: sel.value || null } });
+      reload();
+    } catch (e) {
+      toast(e.message);
+      reload();
+    }
+  }));
   app.querySelectorAll("[data-docread]").forEach((b) => b.addEventListener("click", async () => {
     try {
       await api(`projects/${enc}/documents-read`, { body: {} });

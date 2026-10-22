@@ -314,7 +314,7 @@ export function detail(id) {
       const j = readJson(f, null);
       return j && j.styles ? { ...j, at: statSync(f).mtimeMs } : null;
     })(),
-    shotList: (readJson(path.join(dir, "art/shots.json"), []) || []).map((x) => ({ id: x.id, prompt: x.prompt })),
+    shotList: (readJson(path.join(dir, "art/shots.json"), []) || []).map((x) => ({ id: x.id, prompt: x.prompt, source: x.source || null })),
     music: {
       // the film's own loops, plus the client's that the film does not have yet (copied in when chosen)
       loops: (() => {
