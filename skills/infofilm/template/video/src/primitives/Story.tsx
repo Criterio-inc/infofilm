@@ -27,7 +27,7 @@ export const useCam = () => React.useContext(CamContext);
 /** A point in the picture (fractions) → a point on the screen, for the camera now. */
 export const toScreen = (cam: Cam, x: number, y: number) => ({ x: cam.left + x * cam.pw, y: cam.top + y * cam.ph });
 
-function camera(frame: number, stops: { at: number; cx: number; cy: number; z: number; dur: number }[], img: [number, number]) {
+export function camera(frame: number, stops: { at: number; cx: number; cy: number; z: number; dur: number }[], img: [number, number]) {
   let cur = { cx: stops[0].cx, cy: stops[0].cy, z: stops[0].z };
   for (let i = 1; i < stops.length; i++) {
     const s = stops[i];
@@ -48,7 +48,7 @@ function camera(frame: number, stops: { at: number; cx: number; cy: number; z: n
   return { pw, ph, left: W / 2 - cx * pw, top: H / 2 - cy * ph, cx, cy, z };
 }
 
-const Light: React.FC<{ frame: number; from: [number, number] }> = ({ frame, from }) => {
+export const Light: React.FC<{ frame: number; from: [number, number] }> = ({ frame, from }) => {
   const k = MOOD.light;
   const breathe = (0.55 + 0.15 * Math.sin(frame / 45) + 0.06 * Math.sin(frame / 13)) * k;
   const angle = 118 + 4 * Math.sin(frame / 120);
@@ -63,7 +63,7 @@ const Light: React.FC<{ frame: number; from: [number, number] }> = ({ frame, fro
   );
 };
 
-const Dust: React.FC<{ frame: number; cam: Cam; from: [number, number] }> = ({ frame, cam, from }) => {
+export const Dust: React.FC<{ frame: number; cam: Cam; from: [number, number] }> = ({ frame, cam, from }) => {
   const n = Math.round(46 * MOOD.dust);
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>

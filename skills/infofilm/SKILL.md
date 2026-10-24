@@ -107,6 +107,7 @@ Prompt for American 1950s idioms; genre words like "schlager" drag the music som
 - Builders can start before the narration exists, because cues follow the estimated words and then move to the real ones by themselves. If the script changes while they work (a review lands), send each builder the exact changes for its scenes with SendMessage.
 - Review every scene's sheet yourself.
 - **Berättarläge.** A scene can use `<Story>` instead of `<Card>`: the illustration fills the frame, a camera moves between stops on spoken words, light and dust move with the film's mood, and the facts are drawn on top (plates, rings round things in the picture, stamps). Use it where the picture carries the story, and keep cards for charts and comparisons; a film mixes both. `python3 tools/grid.py Sxx` shows where things are in the picture. Every story scene still has its infographic facts.
+- **Levande kort** (film.json `liveCards`, on for new films except the newsreel): a card's picture fills the frame behind its bands and drifts towards `focus` with light and dust, so no scene stands still. Keep `focus` on the subject and the plates on the other side.
 - **Textning i bild** (film.json `captions`, set in the app) burns the narration in: the card's caption band shows the spoken words and story scenes get a box at the bottom. The SRT is delivered either way.
 - Details: [references/scenes.md](references/scenes.md).
 

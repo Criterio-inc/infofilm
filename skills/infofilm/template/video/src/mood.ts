@@ -28,8 +28,11 @@ const TABLE: Record<string, Motion> = {
 // the user's own words ("somrig och lite nostalgisk"): the middle of the scale
 const OWN: Motion = { pace: 1, breathe: 1, light: 0.9, dust: 0.8, bounce: 0.9, vignette: 1 };
 
-const tl = master as { mood?: string; captions?: boolean };
+const tl = master as { mood?: string; captions?: boolean; liveCards?: boolean };
 export const MOOD_NAME = String(tl.mood ?? "saklig").toLowerCase();
 export const MOOD: Motion = TABLE[MOOD_NAME] ?? OWN;
 /** true: the narration is burned in (the card's caption band shows the spoken words, a story scene a box). */
 export const BURN = Boolean(tl.captions);
+/** true: cards are alive (film.json "liveCards"): the picture fills the frame behind the card's bands and
+ * drifts with light and dust, like a story scene; the plates and facts stay where the scene put them. */
+export const LIVE = Boolean(tl.liveCards);
