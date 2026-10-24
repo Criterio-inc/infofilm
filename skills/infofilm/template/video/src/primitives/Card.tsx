@@ -4,6 +4,8 @@ import { ease, pop, prog } from "../anim";
 import { DISPLAY_FONT, DISPLAY_EM, DISPLAY_UPPER, MONO, MONO_WEIGHT, UI } from "../fonts";
 import { BRAND, C, CAPTION_H, CAPTION_SIZE, CARD, PLATE, S, TITLE_H, WIN } from "../theme";
 import { useScene } from "../timing";
+import { BURN } from "../mood";
+import { Spoken } from "./Spoken";
 
 export const ENTER = 18; // frames the card needs to land
 export const EXIT = 14; // frames the card needs to leave
@@ -143,7 +145,8 @@ export const Card: React.FC<{
             whiteSpace: "nowrap",
           }}
         >
-          {caption}
+          {/* film.json "captions": the band shows the spoken words instead */}
+          {BURN ? <Spoken max={Math.round((CARD.w - 112 * S) / (CAPTION_SIZE * 0.52))} /> : caption}
         </div>
         {/* ink border on top of everything */}
         {CARD.border > 0 && (

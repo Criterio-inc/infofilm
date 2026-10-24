@@ -177,6 +177,17 @@ def build_brand():
     return f"{BRAND.get('name', '?')}, {FORMAT} {w}×{h}"
 
 
+def img_size(p):
+    """[width, height] of an illustration, for the story camera (None when it cannot be read)."""
+    r = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", str(p)],
+                       capture_output=True, text=True)
+    try:
+        w, h = (int(x) for x in r.stdout.strip().split(",")[:2])
+        return [w, h]
+    except ValueError:
+        return None
+
+
 def main():
     brand = build_brand()
     _, scenes = parse()
@@ -231,6 +242,7 @@ def main():
         part = s["part"] or ""
         pconf = PARTS.get(part, {})
         img = f"img/film-{s['id']}.jpg"
+        size = img_size(pub / img) if (pub / img).exists() else None
         out.append({
             "id": s["id"], "name": s["name"], "part": part, "kicker": FILM["kicker"] if "kicker" in FILM else pconf.get("kicker", part),
             # a part without its own bed gets the film's loop (film.json "bed", set by the app's music choice)
@@ -239,6 +251,7 @@ def main():
             "audio": audio_rel, "audioFrames": audio_frames, "intro": intro, "after": after,
             "text": TAG.sub("", s["text"]), "words": words, "estimated": estimated,
             "img": img if (pub / img).exists() else None,
+            **({"imgSize": size} if size else {}),
         })
         frame += total
 
@@ -248,7 +261,9 @@ def main():
         out[-1]["last"] = True
         frame += END_HOLD
     tl = {"title": FILM.get("title", ""), "locale": FILM.get("locale", "en-US"), "fps": FPS,
-          "durationInFrames": frame, "fadeOutFrames": min(FADE_OUT, frame), "music": music, "scenes": out}
+          "durationInFrames": frame, "fadeOutFrames": min(FADE_OUT, frame), "music": music,
+          # how much the film moves (video/src/mood.ts) and whether the narration is burned in
+          "mood": FILM.get("mood", "saklig"), "captions": bool(FILM.get("captions", False)), "scenes": out}
     dst = ROOT / "video/src/timeline/master.json"
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(json.dumps(tl, ensure_ascii=False, indent=1), encoding="utf-8")
