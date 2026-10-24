@@ -118,6 +118,14 @@ export function runAction(id, action, args = {}) {
       return startJob(id, key ? "Musik: byt slinga" : "Musik: ingen", [build(dir)]);
     }
 
+    case "captions": {
+      // the narration burned in (the card's caption band, a box in story scenes); the SRT is delivered anyway
+      film.captions = Boolean(args.on);
+      writeFileSync(path.join(dir, "film.json"), JSON.stringify(film, null, 2) + "\n");
+      logLine(id, `textning i bild ${film.captions ? "på" : "av"} i appen`);
+      return startJob(id, film.captions ? "Textning i bild: på" : "Textning i bild: av", [build(dir)]);
+    }
+
     case "apply-profile": {
       // the sender's profile as it is now, into this film: its formats, language, music choice and voice stay
       const pdir = profileDir(film.profile);
@@ -221,7 +229,7 @@ export const PRESETS = {
   scenes: {
     label: "Bygg scenerna",
     prompt:
-      "Gör fas 7 och följ de länkade designsystemen. Lägg stillbilder där appen visar dem: STILLS_DIR=../out/stills-16x9 node tools/review.mjs … från video/ (16x9 byts mot formatet, till exempel 1x1). Ta bort demoscenerna (TheYear, TheRule) och bygg filmens scener, de bärande först. Lägg siffror i data.ts med källa. Lägg ut scenerna efter WIN och WIDE så att de fungerar i alla format i film.json, och kontrollera stillbilder i varje format. Kör lint_cues och tsc. Avsluta med en rad per scen om vad som syns.",
+      "Gör fas 7 och följ de länkade designsystemen. Blanda kort och berättarläge (<Story>, references/scenes.md): berättarläge där bilden bär berättelsen, med kamerastopp på orden (python3 tools/grid.py visar var saker finns i bilden) och fakta ovanpå som plattor, ringar och stämplar; kort för diagram och jämförelser. Lägg stillbilder där appen visar dem: STILLS_DIR=../out/stills-16x9 node tools/review.mjs … från video/ (16x9 byts mot formatet, till exempel 1x1). Ta bort demoscenerna (TheYear, TheRule) och bygg filmens scener, de bärande först. Lägg siffror i data.ts med källa. Lägg ut scenerna efter WIN och WIDE så att de fungerar i alla format i film.json, och kontrollera stillbilder i varje format. Kör lint_cues och tsc. Avsluta med en rad per scen om vad som syns.",
   },
   music: {
     label: "Musikprompt",
