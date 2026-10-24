@@ -2,10 +2,11 @@ import React from "react";
 import { AbsoluteFill, Img, interpolate, staticFile } from "remotion";
 import { ease, pop, prog } from "../anim";
 import { DISPLAY_FONT, DISPLAY_EM, DISPLAY_UPPER, MONO, MONO_WEIGHT, UI } from "../fonts";
-import { BRAND, C, CAPTION_H, CAPTION_SIZE, CARD, PLATE, S, TITLE_H, WIN } from "../theme";
+import { BRAND, C, CAPTION_H, CAPTION_SIZE, CARD, H, PLATE, S, TITLE_H, W, WIN } from "../theme";
 import { useScene } from "../timing";
-import { BURN } from "../mood";
+import { BURN, LIVE, MOOD } from "../mood";
 import { Spoken } from "./Spoken";
+import { camera, Dust, Light } from "./Story";
 
 export const ENTER = 18; // frames the card needs to land
 export const EXIT = 14; // frames the card needs to leave
@@ -29,7 +30,12 @@ export const Card: React.FC<{
   /** 0..1 darkening of the illustration (for overlays on top) */
   dim?: number;
   children?: React.ReactNode;
-}> = ({ title, titleNode, kicker, caption, img, zoom = [1.03, 1.1], focus = [0.5, 0.5], dim = 0, children }) => {
+}> = (props) => (LIVE && props.img ? <LiveCard {...props} /> : <StillCard {...props} />);
+
+type CardProps = React.ComponentProps<typeof Card>;
+
+/** The card as it has always been: a card on the table with its picture in a window. */
+const StillCard: React.FC<CardProps> = ({ title, titleNode, kicker, caption, img, zoom = [1.03, 1.1], focus = [0.5, 0.5], dim = 0, children }) => {
   const s = useScene();
   const f = s.frame;
   const d = s.durationInFrames;
@@ -152,6 +158,56 @@ export const Card: React.FC<{
         {CARD.border > 0 && (
           <div style={{ position: "absolute", inset: 0, borderRadius: CARD.radius, border: `${CARD.border}px solid ${C.ink}`, pointerEvents: "none" }} />
         )}
+      </div>
+    </AbsoluteFill>
+  );
+};
+
+/**
+ * film.json "liveCards": the picture fills the frame behind the card and drifts slowly towards the scene's
+ * `focus` (kept on the side the plates leave free), with the window light and dust of a story scene. The
+ * title and caption bands float at the card's places, and the overlays keep their window coordinates.
+ */
+const LiveCard: React.FC<CardProps> = ({ title, titleNode, kicker, caption, img, focus = [0.5, 0.5], dim = 0, children }) => {
+  const s = useScene();
+  const f = s.frame;
+  const d = s.durationInFrames;
+  const size: [number, number] = s.imgSize ?? [2400, 1350];
+  // where the subject should sit on the screen: away from the plates (which sit on the other side)
+  const sx = focus[0] > 0.55 ? 0.64 : focus[0] < 0.45 ? 0.36 : 0.5;
+  const base = Math.max(H / size[1], W / size[0]);
+  const at = (z: number) => focus[0] - ((sx - 0.5) * W) / (size[0] * base * z);
+  const cam = camera(
+    f,
+    [
+      { at: 0, cx: at(1.15) - 0.03, cy: focus[1] + 0.02, z: 1.15, dur: 1 },
+      { at: 0, cx: at(1.38), cy: focus[1], z: 1.38, dur: Math.max(30, d) },
+    ],
+    size,
+  );
+  const tin = prog(f, 0, ENTER, ease.out);
+  const tout = s.last ? 0 : prog(f, d - EXIT, EXIT, ease.in);
+  const shown = DISPLAY_UPPER ? (title ?? "").toUpperCase() : (title ?? "");
+  const logoH = BRAND.logo ? Math.round((BRAND.logo.height ?? 56) * S) : 0;
+  const titleRoom = CARD.w * 0.62 - (BRAND.logo ? logoH * (BRAND.logo.aspect ?? 3) : 0);
+  const band: React.CSSProperties = { position: "absolute", left: CARD.x, width: CARD.w, background: C.band, borderRadius: CARD.radius, boxShadow: "0 12px 34px rgba(22,34,46,0.25)", display: "flex", alignItems: "center", padding: `0 ${Math.round(56 * S)}px`, boxSizing: "border-box" };
+  return (
+    <AbsoluteFill style={{ opacity: tin * (1 - tout), overflow: "hidden", background: C.backdrop }}>
+      <Img src={staticFile(img!)} style={{ position: "absolute", left: cam.left, top: cam.top, width: cam.pw, height: cam.ph }} />
+      {dim > 0 && <AbsoluteFill style={{ background: C.dim, opacity: dim }} />}
+      <Light frame={f} from={[0.1, 0.25]} />
+      {MOOD.dust > 0.3 && <Dust frame={f} cam={cam} from={[0.1, 0.25]} />}
+      {/* the overlays in window coordinates, where the card's window was */}
+      <div style={{ position: "absolute", left: CARD.x, top: CARD.y + TITLE_H, width: WIN.w, height: WIN.h }}>{children}</div>
+      <div style={{ ...band, top: CARD.y, height: TITLE_H, justifyContent: "space-between", gap: 24, transform: `translateY(${(1 - tin) * -30}px)` }}>
+        {titleNode ?? <div style={{ ...DISPLAY_FONT, fontSize: Math.min(Math.round(78 * S), Math.floor(titleRoom / (Math.max(1, shown.length) * DISPLAY_EM))), color: C.bandText, lineHeight: 1, whiteSpace: "nowrap" }}>{shown}</div>}
+        <div style={{ display: "flex", alignItems: "center", gap: Math.round(28 * S) }}>
+          {kicker && <div style={{ fontFamily: MONO, fontWeight: MONO_WEIGHT, fontSize: Math.round(26 * S), letterSpacing: "0.14em", color: C.kicker, textTransform: "uppercase", whiteSpace: "nowrap" }}>{kicker}</div>}
+          {BRAND.logo && <Img src={staticFile(BRAND.logo.src)} style={{ height: logoH, width: "auto", display: "block" }} />}
+        </div>
+      </div>
+      <div style={{ ...band, top: CARD.y + CARD.h - CAPTION_H, height: CAPTION_H, fontFamily: UI, fontWeight: 600, fontSize: CAPTION_SIZE, color: C.bandText, whiteSpace: "nowrap", transform: `translateY(${(1 - tin) * 30}px)` }}>
+        {BURN ? <Spoken max={Math.round((CARD.w - 112 * S) / (CAPTION_SIZE * 0.52))} /> : caption}
       </div>
     </AbsoluteFill>
   );

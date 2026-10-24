@@ -396,7 +396,7 @@ async function jobText(jobId) {
 }
 
 const stepOf = (title) =>
-  /^Uppdatera filmen/.test(title) ? null : /^Röst/.test(title) ? "voice" : /^Bilder|bildprompter/i.test(title) ? "images" : /Snabbförhandsvisning|Stillbilder|bygg scenerna|granska|Musikprompt|^Musik|^Textning/i.test(title) ? "review"
+  /^Uppdatera filmen/.test(title) ? null : /^Röst/.test(title) ? "voice" : /^Bilder|bildprompter/i.test(title) ? "images" : /Snabbförhandsvisning|Stillbilder|bygg scenerna|granska|Musikprompt|^Musik|^Textning|^Levande kort/i.test(title) ? "review"
   : /^Rendera/.test(title) ? "deliver" : /research och manus|^Läs dokumentet/i.test(title) ? "script" : null;
 const kr = (n) => new Intl.NumberFormat("sv-SE").format(n);
 const list = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(", ")} och ${xs[xs.length - 1]}` : xs[0] || "");
@@ -579,6 +579,7 @@ async function projectPage(id) {
     }
     const ms = p.music || { loops: [], bed: "" }; // an older server sends no music
     card.more = `<label class="small" style="display:flex;align-items:flex-start;font-weight:400;margin:0 0 12px;gap:10px"><input type="checkbox" style="width:auto;margin-top:3px;flex:none" data-captions ${p.film?.captions ? "checked" : ""} ${busy ? "disabled" : ""}> <span><b>Textning i bild</b>: det berättaren säger syns i filmen, för den som tittar utan ljud. Undertextfilen följer med ändå.</span></label>
+<label class="small" style="display:flex;align-items:flex-start;font-weight:400;margin:0 0 12px;gap:10px"><input type="checkbox" style="width:auto;margin-top:3px;flex:none" data-livecards ${p.film?.liveCards ? "checked" : ""} ${busy ? "disabled" : ""}> <span><b>Levande kort</b>: bilden i korten fyller rutan och rör sig långsamt, med ljus och damm som i berättarscenerna. Plattorna och fakta ligger kvar.</span></label>
       <div class="row"><label style="margin:0">Bakgrundsmusik</label><select id="bedsel" style="width:auto" ${busy ? "disabled" : ""}>${[["", "Ingen"], ...ms.loops.map((m) => [m.key, /^bed-eget-/.test(m.key) ? m.label : `Slingan ${m.label}`])].map(([v, l]) => `<option value="${esc(v)}" ${v === ms.bed ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>
       ${ms.loops.find((m) => m.key === ms.bed && m.src) ? `<audio controls preload="none" src="${fileUrl(id, ms.loops.find((m) => m.key === ms.bed && m.src).src)}" style="flex:1;min-width:200px"></audio>` : ""}
       <label class="btn" style="margin:0">Ladda upp eget ljud<input type="file" id="ownaudio" accept=".wav,.mp3,.m4a,.aif,.aiff,.flac" hidden ${busy ? "disabled" : ""}></label></div>
@@ -688,6 +689,7 @@ async function projectPage(id) {
   }));
   $("#bedsel")?.addEventListener("change", (e) => act("music", { key: e.target.value }));
   app.querySelector("[data-captions]")?.addEventListener("change", (e) => act("captions", { on: e.target.checked }));
+  app.querySelector("[data-livecards]")?.addEventListener("change", (e) => act("livecards", { on: e.target.checked }));
   // the sender's profile as it is now, into this film: show what changes first, then a yes
   app.querySelectorAll("[data-profile-update]").forEach((b) => b.addEventListener("click", async () => {
     try {

@@ -51,6 +51,9 @@ const s = useScene();
 </Story>
 ```
 
+## Living cards (film.json `liveCards`)
+New films (all senders but the newsreel) have `liveCards: true`, also a box in the app's Titta igenom. A card scene then shows its picture full-frame behind the card's title and caption bands, drifting slowly towards `focus` (kept on the side the plates leave free) with the window light and dust of a story scene; the overlays keep their window coordinates. So set `focus` to where the subject is in the picture, and put plates on the other side. Without it, the card sits on the table with its picture in a window, as before.
+
 ## Fan-out to builders
 For a film of 25+ scenes, run 2–3 builder subagents in parallel:
 1. Split the scenes into contiguous groups (A: opening + part 1; B: commercial breaks + part 2; C: part 3 + closing).

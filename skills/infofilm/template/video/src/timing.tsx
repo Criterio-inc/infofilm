@@ -44,6 +44,8 @@ export type Timeline = {
   mood?: string;
   /** film.json "captions": the narration burned in */
   captions?: boolean;
+  /** film.json "liveCards": the cards' pictures fill the frame and move */
+  liveCards?: boolean;
   scenes: SceneData[];
 };
 

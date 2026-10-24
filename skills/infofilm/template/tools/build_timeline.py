@@ -263,7 +263,8 @@ def main():
     tl = {"title": FILM.get("title", ""), "locale": FILM.get("locale", "en-US"), "fps": FPS,
           "durationInFrames": frame, "fadeOutFrames": min(FADE_OUT, frame), "music": music,
           # how much the film moves (video/src/mood.ts) and whether the narration is burned in
-          "mood": FILM.get("mood", "saklig"), "captions": bool(FILM.get("captions", False)), "scenes": out}
+          "mood": FILM.get("mood", "saklig"), "captions": bool(FILM.get("captions", False)),
+          "liveCards": bool(FILM.get("liveCards", False)), "scenes": out}
     dst = ROOT / "video/src/timeline/master.json"
     dst.parent.mkdir(parents=True, exist_ok=True)
     dst.write_text(json.dumps(tl, ensure_ascii=False, indent=1), encoding="utf-8")
