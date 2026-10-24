@@ -126,6 +126,14 @@ export function runAction(id, action, args = {}) {
       return startJob(id, film.captions ? "Textning i bild: på" : "Textning i bild: av", [build(dir)]);
     }
 
+    case "livecards": {
+      // living cards: the picture fills the frame behind the card's bands and drifts with light and dust
+      film.liveCards = Boolean(args.on);
+      writeFileSync(path.join(dir, "film.json"), JSON.stringify(film, null, 2) + "\n");
+      logLine(id, `levande kort ${film.liveCards ? "på" : "av"} i appen`);
+      return startJob(id, film.liveCards ? "Levande kort: på" : "Levande kort: av", [build(dir)]);
+    }
+
     case "apply-profile": {
       // the sender's profile as it is now, into this film: its formats, language, music choice and voice stay
       const pdir = profileDir(film.profile);
@@ -192,7 +200,15 @@ export function createProject(b) {
         writeBrief(dir, { ...b, designSystems, moodText: mood });
         const f = path.join(dir, "film.json");
         const film = JSON.parse(readFileSync(f, "utf8"));
-        Object.assign(film, { mood }, designSystems.length ? { designSystems } : {});
+        // living cards for every sender but the newsreel's (its cards are dealt onto a table)
+        const filmLook = (() => {
+          try {
+            return Boolean(JSON.parse(readFileSync(path.join(dir, "brand/profile.json"), "utf8")).filmLook);
+          } catch {
+            return false;
+          }
+        })();
+        Object.assign(film, { mood, liveCards: !filmLook }, designSystems.length ? { designSystems } : {});
         if (typeof b.endLine === "string") film.endCard = { ...(film.endCard || {}), line: b.endLine.trim() };
         if (String(b.kicker || "").trim()) film.kicker = String(b.kicker).trim();
         writeFileSync(f, JSON.stringify(film, null, 2) + "\n");
