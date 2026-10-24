@@ -31,6 +31,26 @@ The anatomy of a golden scene:
 4. The infographic on a `<Plate>`, with numbers from `data.ts` through `<Counter>` / `fmt()`.
 5. At most about two `Stamp`s and about four `Sfx`, all on cues.
 
+## Berättarläge: `<Story>` instead of `<Card>`
+A scene can drop the card: the illustration fills the frame, a camera moves between stops that land on spoken words, light falls in and dust drifts in it, and the facts are drawn on top. Use it where the picture carries the story: the opening, a turn, a person's situation, the closing call. Keep the card for scenes whose point is a chart, a comparison or many numbers. A film mixes both. Every story scene still has infographics with facts from `data.ts`: plates, rings, pins, stamps.
+
+- **Find things in the picture.** `python3 tools/grid.py S01` writes `out/grid/film-S01.jpg` with a 10 × 10 grid; read off where the subjects are (x, y as fractions). The illustrations are wide and often leave one side empty for the card's text: keep `z` at 1.2 or more and the stops on the busy side, so the empty side stays out of the frame.
+- **Camera.** `stops` are `{ at, cx, cy, z, dur? }`. `at` is a spoken phrase (`"microsoft 365"`; the move starts just before it) or `0` for the first. Three to six stops per scene, each on a beat of the narration: wide, then closer on what is said, then out again. With plates on the right at 16:9, keep what the camera looks at in the left two thirds (raise `cx` a little).
+- **Facts on top.** `StoryPlate` (a light plate in screen coordinates, in on a phrase, out on the next beat; `Kick` for its small label), `Ring` (a hand-drawn ring round `box: [x1, y1, x2, y2]` in the picture, with an optional `label`), `Pin` (anything placed on a point in the picture), `Fly` (icons flying in an arc from a point in the picture to the screen, e.g. `<Envelope />` to a plate), `Stamp` (the one big "do this", with rays), `DrawCheck` and `CrossOut`. Rings and pins follow the camera by themselves (`useCam`, `toScreen`). One beat at a time: the previous plate leaves when the next arrives.
+- **Mood.** The film's mood sets the pace of the camera, its breathing, the light, the dust and how bouncy stamps and pins are (`mood.ts`). Don't scale motion yourself; choose fewer, calmer stops for "saklig" and "allvarlig", more for "lekfull" and "inspirerande".
+- **Formats.** Children are in screen coordinates (`W` × `H`); branch on `WIDE` for plate positions as in card scenes. The camera covers the frame in every format.
+- **Captions.** When film.json `captions` is on (the app's "Textning i bild"), `<Story>` shows the spoken words in a box at the bottom and every `<Card>` shows them in its caption band instead of `caption`. Keep the bottom 160 px of a story scene free.
+
+```tsx
+const s = useScene();
+<Story stops={[{ at: 0, cx: 0.3, cy: 0.52, z: 1.25 }, { at: "microsoft 365", cx: 0.36, cy: 0.6, z: 1.45 }, { at: "filerna kommer", cx: 0.47, cy: 0.62, z: 1.55 }]} light={[0.08, 0.3]}>
+  <StoryPlate at="microsoft 365" out="förvaltning för förvaltning" x={1300} y={96} w={540}><Kick>E-posten flyttar till</Kick>…</StoryPlate>
+  <Fly at="microsoft 365" from={[0.26, 0.6]} to={{ x: 1360, y: 146 }}><Envelope /></Fly>
+  <Ring at="filerna kommer" box={[0.35, 0.47, 0.47, 0.8]} label="Filerna: etapp 2" side="left" />
+  <Stamp at="börja nu" x={1560} y={380}>Börja nu</Stamp>
+</Story>
+```
+
 ## Fan-out to builders
 For a film of 25+ scenes, run 2–3 builder subagents in parallel:
 1. Split the scenes into contiguous groups (A: opening + part 1; B: commercial breaks + part 2; C: part 3 + closing).
@@ -54,6 +74,9 @@ When they finish, run `lint_cues.py` and `tsc`, then review every scene yourself
 |---|---|
 | `EndCard` | the closing card: the client's logo, line and address (the `end-card` scene uses it by itself) |
 | `Card` | the scene's frame: `title`, `titleNode` (custom title, e.g. a Lobster slogan), `kicker`, `img`, `zoom`, `focus`, `dim`, `caption`, children in window coordinates |
+| `Story` | berättarläge: the picture fills the frame, camera `stops` on phrases, `light`, `dust`, the title on a plate; children in screen coordinates (see above) |
+| `StoryPlate`, `Kick`, `Ring`, `Pin`, `Fly`, `Stamp` (from `Story`), `DrawCheck`, `CrossOut`, `Envelope` | facts on top of a story scene; rings and pins follow the camera |
+| `Spoken`, `SubtitleBox` | the narration as burned-in captions (used by `Card` and `Story` when film.json `captions` is on) |
 | `Plate` | a light panel for an infographic (the profile's `plate` style) |
 | `Captions` | caption text that swaps on cues |
 | `Counter` | a number that counts up and lands on a frame |

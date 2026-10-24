@@ -106,6 +106,8 @@ Prompt for American 1950s idioms; genre words like "schlager" drag the music som
 - Then fan out to 2–3 parallel builder subagents with `video/CONTRACT.md` (fill in its `{{…}}` lines). Each builder has its own group registry and verifies with contact sheets.
 - Builders can start before the narration exists, because cues follow the estimated words and then move to the real ones by themselves. If the script changes while they work (a review lands), send each builder the exact changes for its scenes with SendMessage.
 - Review every scene's sheet yourself.
+- **Berättarläge.** A scene can use `<Story>` instead of `<Card>`: the illustration fills the frame, a camera moves between stops on spoken words, light and dust move with the film's mood, and the facts are drawn on top (plates, rings round things in the picture, stamps). Use it where the picture carries the story, and keep cards for charts and comparisons; a film mixes both. `python3 tools/grid.py Sxx` shows where things are in the picture. Every story scene still has its infographic facts.
+- **Textning i bild** (film.json `captions`, set in the app) burns the narration in: the card's caption band shows the spoken words and story scenes get a box at the bottom. The SRT is delivered either way.
 - Details: [references/scenes.md](references/scenes.md).
 
 ### 8 · Render and deliver

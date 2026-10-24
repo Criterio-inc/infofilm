@@ -27,6 +27,7 @@ export type SceneData = {
   words: Word[];
   estimated: boolean; // no narration yet: word times are estimated from the text
   img: string | null; // "img/film-S05.jpg" when that file exists in public/
+  imgSize?: [number, number]; // the illustration's width and height in pixels (for <Story>'s camera)
 };
 
 export type MusicCut = { src: string; inFrames: number; outFrames: number; fadeFrames: number };
@@ -39,6 +40,10 @@ export type Timeline = {
   /** the final frames over which music and picture fade out (every film ends softly) */
   fadeOutFrames?: number;
   music: Record<string, MusicCut>;
+  /** film.json "mood" (mood.ts turns it into how much things move) */
+  mood?: string;
+  /** film.json "captions": the narration burned in */
+  captions?: boolean;
   scenes: SceneData[];
 };
 
