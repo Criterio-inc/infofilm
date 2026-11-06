@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Tegel, Pärs egna verktyg: platta #A9523A, motiv #F5F1E6, accent #2E5A45. Infofilm: filmruta med staplar och spelknapp. -->
+  <rect width="1024" height="1024" fill="#A9523A"/>
+  <rect x="90" y="160" width="844" height="704" rx="84" fill="#F5F1E6"/>
+  <g fill="#A9523A"><rect x="210" y="520" width="104" height="220" rx="26"/><rect x="364" y="410" width="104" height="330" rx="26"/><rect x="518" y="300" width="104" height="440" rx="26"/></g>
+  <path d="M700 440 L700 680 L860 560 Z" fill="#A9523A" stroke="#A9523A" stroke-width="30" stroke-linejoin="round"/>
+  <circle cx="820" cy="270" r="44" fill="#2E5A45"/>
+</svg>
