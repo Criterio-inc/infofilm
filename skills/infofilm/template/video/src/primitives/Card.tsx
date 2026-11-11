@@ -130,7 +130,8 @@ const StillCard: React.FC<CardProps> = ({ title, titleNode, kicker, caption, img
             {BRAND.logo && <Img src={staticFile(BRAND.logo.src)} style={{ height: logoH, width: "auto", display: "block" }} />}
           </div>
         </div>
-        {/* caption band */}
+        {/* caption band, left out when there is nothing to show (no captions burned in and no caption) */}
+        {(BURN || caption) && (
         <div
           style={{
             position: "absolute",
@@ -154,6 +155,7 @@ const StillCard: React.FC<CardProps> = ({ title, titleNode, kicker, caption, img
           {/* film.json "captions": the band shows the spoken words instead */}
           {BURN ? <Spoken max={Math.round((CARD.w - 112 * S) / (CAPTION_SIZE * 0.52))} /> : caption}
         </div>
+        )}
         {/* ink border on top of everything */}
         {CARD.border > 0 && (
           <div style={{ position: "absolute", inset: 0, borderRadius: CARD.radius, border: `${CARD.border}px solid ${C.ink}`, pointerEvents: "none" }} />
@@ -206,9 +208,11 @@ const LiveCard: React.FC<CardProps> = ({ title, titleNode, kicker, caption, img,
           {BRAND.logo && <Img src={staticFile(BRAND.logo.src)} style={{ height: logoH, width: "auto", display: "block" }} />}
         </div>
       </div>
+      {(BURN || caption) && (
       <div style={{ ...band, top: CARD.y + CARD.h - CAPTION_H, height: CAPTION_H, fontFamily: UI, fontWeight: 600, fontSize: CAPTION_SIZE, color: C.bandText, whiteSpace: "nowrap", transform: `translateY(${(1 - tin) * 30}px)` }}>
         {BURN ? <Spoken max={Math.round((CARD.w - 112 * S) / (CAPTION_SIZE * 0.52))} /> : caption}
       </div>
+      )}
     </AbsoluteFill>
   );
 };
