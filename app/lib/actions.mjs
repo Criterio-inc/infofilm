@@ -8,7 +8,7 @@ import path from "node:path";
 import { SKILL_DIR, toolEnv } from "./config.mjs";
 import { runningJob, startJob } from "./jobs.mjs";
 import { toTrash } from "./trash.mjs";
-import { designLinks, logLine, profileDir, projectDir, saveApp, writeBrief } from "./projects.mjs";
+import { designLinks, logLine, profileDir, projectDir, saveApp, summary, writeBrief } from "./projects.mjs";
 import { claudeStep } from "./claude.mjs";
 import { loadConfig } from "./config.mjs";
 
@@ -333,6 +333,8 @@ export function deleteProject(id) {
 export function approve(id, step) {
   if (!["document", "script", "review"].includes(step)) throw Object.assign(new Error("okänt steg"), { status: 400 });
   const f = path.join(projectDir(id), ".infofilm-app.json");
+  // a yes to the film counts only for what the user can have seen: a quick version or a finished film made after the last change
+  if (step === "review" && !summary(id).watch) throw Object.assign(new Error("Filmen har ändrats sedan snabbversionen gjordes: gör en ny och titta på den först"), { status: 409 });
   const cur = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
   saveApp(id, { approved: { ...(cur.approved || {}), [step]: Date.now() } });
   logLine(id, `godkänt i appen: ${{ document: "förslaget ur dokumentet", script: "manuset", review: "förhandsvisningen" }[step]}`);

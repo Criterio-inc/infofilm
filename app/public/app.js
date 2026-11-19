@@ -92,6 +92,13 @@ const ago = (t) => {
   return new Date(t).toLocaleDateString("sv-SE");
 };
 
+// a point in time as the user says it: "klockan 16:06", with the date when it was not today
+const when = (t) => {
+  const d = new Date(t);
+  const time = d.toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" });
+  return d.toDateString() === new Date().toDateString() ? `klockan ${time}` : `${d.toLocaleDateString("sv-SE")} klockan ${time}`;
+};
+
 // ── router ──
 async function route() {
   closeStream();
@@ -421,6 +428,9 @@ async function projectPage(id) {
   const unnarrated = p.scenes.filter((s) => !s.narrated);
   const chars = unnarrated.reduce((n, s) => n + (s.text || "").length, 0);
   const previewStale = p.preview && p.preview.mtime < p.timelineMtime;
+  // what shows the film as it is now: a quick version or a finished film made after the last change
+  // (an older server sends no watch: then only a quick version that is not stale counts)
+  const watch = p.watch !== undefined ? p.watch : p.preview && !previewStale ? { ...p.preview, kind: "preview" } : null;
   const last = p.jobs[0];
   // a failure shows on the step it belongs to (a question to Claude belongs to every step)
   const failed = !busy && last?.status === "failed" && [view, null].includes(stepOf(last.title)) ? last : null;
@@ -564,14 +574,16 @@ async function projectPage(id) {
       card.title = "Låt Claude bygga scenerna";
       card.facts = ["Tar 5 till 15 minuter", "Ingår i ditt Claude-abonnemang"];
       card.main = run('data-preset="scenes"', "Bygg scenerna");
-    } else if (!p.preview || previewStale) {
+    } else if (!watch) {
       card.title = p.preview ? "Filmen har ändrats" : "Gör en snabbversion";
-      card.text = "En snabbversion i halv upplösning av hela filmen, med röst och bilder, så att du kan titta på den här.";
-      card.facts = ["Tar en till två minuter", "Kostar inget"];
+      card.text = p.preview
+        ? `Snabbversionen du har är gjord ${when(p.preview.mtime)}, före den senaste ändringen (${when(p.timelineMtime)}). Den visar alltså inte ändringen. Gör en ny och titta på den.`
+        : "En snabbversion i halv upplösning av hela filmen, med röst och bilder, så att du kan titta på den här.";
+      card.facts = ["Tar några minuter", "Kostar inget"];
       card.main = run('data-act="preview"', p.preview ? "Gör en ny snabbversion" : "Gör en snabbversion");
     } else if (!done.review) {
       card.title = "Titta på filmen";
-      card.text = "Är något fel, skriv det i rutan nedanför. Claude ändrar, och du gör en ny snabbversion.";
+      card.text = `${watch.kind === "film" ? "Du tittar på den färdiga filmen. Den" : "Snabbversionen"} är gjord ${when(watch.mtime)}, efter den senaste ändringen. Är något fel, skriv det i rutan nedanför. Claude ändrar, och du gör en ny snabbversion. Annars trycker du på Ser bra ut.`;
       card.main = run('data-approve="review"', "Ser bra ut");
     } else {
       card.title = "Filmen är godkänd";
@@ -602,7 +614,9 @@ async function projectPage(id) {
     const refScenes = p.scenes.filter((s) => p.documents?.refs?.[s.id]?.length);
     if (refScenes.length)
       card.more += `<details style="margin-top:8px"><summary>Sidorna i dokumentet som scenerna bygger på</summary><div class="scenes">${refScenes.map((s) => `<div class="scene"><div class="scene-h"><b>${esc(s.title || s.name)}</b></div>${docRefs(id, p.documents.refs[s.id])}</div>`).join("")}</div></details>`;
-    if (p.preview) card.body = `<video id="previewvid" controls preload="metadata" src="${fileUrl(id, p.preview.path, p.preview.mtime)}"></video>`;
+    // only a film that shows the last change plays on the page; an older quick version is folded away and marked
+    if (watch) card.body = `<video id="previewvid" controls preload="metadata" src="${fileUrl(id, watch.path, watch.mtime)}"></video>`;
+    else if (p.preview) card.body = `<details><summary class="small muted">Den gamla snabbversionen (gjord ${when(p.preview.mtime)}, visar inte den senaste ändringen)</summary><video controls preload="none" src="${fileUrl(id, p.preview.path, p.preview.mtime)}" style="margin-top:8px;opacity:.75"></video></details>`;
   }
 
   if (view === "deliver") {
@@ -612,7 +626,11 @@ async function projectPage(id) {
     const subs = p.subtitles.filter((r) => r.mtime >= p.timelineMtime);
     const fileRow = (r, what = "") => `<div class="spread small"><span><b>${esc(r.name)}</b> <span class="muted">${what || `${(r.size / 1e6).toFixed(1).replace(".", ",")} MB`} · ${ago(r.mtime)}</span></span><button class="link" data-file="out/${esc(r.name)}">Visa i Finder</button></div>`;
     card.title = fresh.length ? "Färdiga filer" : "Gör de färdiga filmerna";
-    card.text = `${esc(p.formats.join(" och "))}, med röst, bilder, musik, jämn ljudnivå och undertexter.${fresh.length ? " Har du ändrat något gör du om filmerna." : ""}`;
+    // what the film really gets: music only when a loop is chosen, the narration in the picture only when that box is ticked
+    const bedOn = Boolean(p.music?.bed && p.music.loops.some((m) => m.key === p.music.bed && m.src));
+    const capOn = Boolean(p.film?.captions);
+    const without = [!bedOn && "utan musik", !capOn && "utan textning i bild"].filter(Boolean);
+    card.text = `${esc(p.formats.join(" och "))}, med ${list(["röst", "bilder", bedOn && "musik", capOn && "textning i bild"].filter(Boolean))}.${without.length ? ` Filmen ${fresh.length ? "är" : "blir"} ${without.join(" och ")}. Vill du ha det väljer du det i Titta igenom.` : ""} Ljudnivån jämnas ut, och undertexterna följer med som en egen fil.${fresh.length ? " Har du ändrat något gör du om filmerna." : ""}`;
     card.facts = [`Tar några minuter${p.formats.length > 1 ? " per format" : ""}`, "Kostar inget"];
     card.main = run('data-act="render"', fresh.length ? "Gör filmerna igen" : "Gör de färdiga filmerna", !fresh.length);
     card.body = fresh.length
@@ -621,6 +639,20 @@ async function projectPage(id) {
     card.more = `${fresh.length ? `<button class="link small" data-reveal="out">Öppna mappen med de färdiga filerna</button>` : ""}
       ${stale.length ? `<details style="margin-top:8px"><summary class="small muted">Äldre filer, gjorda före dina senaste ändringar (${stale.length})</summary><div class="stack" style="margin-top:6px">${stale.map((r) => fileRow(r)).join("")}</div></details>` : ""}`;
   }
+
+  // why the step in view has to wait: what is missing in the first step that is not done, in a sentence
+  const lacking = {
+    script: p.demo || !p.scenes.length ? "Manuset är inte skrivet än." : "Du har inte godkänt manuset: läs det och tryck på Manuset är klart.",
+    voice: !p.voice.id ? "Ingen berättarröst är vald." : "Rösten är inte inläst för alla scener.",
+    images: "Alla scener har inte fått sin bild.",
+    review: !p.scenesBuilt ? "Scenerna är inte byggda än."
+      : watch ? "Du har inte tryckt på Ser bra ut."
+      : p.preview ? `Filmen har ändrats sedan snabbversionen gjordes ${when(p.preview.mtime)}. Gör en ny snabbversion, titta på den och tryck på Ser bra ut.`
+      : "Det finns ingen snabbversion än. Gör en, titta på den och tryck på Ser bra ut.",
+  };
+  const wait = before.length && view !== cur
+    ? `<p class="warn small"><b>${esc(STEP_NAMES[cur])} är inte klart.</b> ${esc(lacking[cur] || "")} ${cur === "review" && watch && p.scenesBuilt ? `<button class="small" data-approve="review" ${busy ? "disabled" : ""}>Ser bra ut</button> ` : ""}<button class="link small" data-view="${cur}">Till ${esc(STEP_NAMES[cur])}</button></p>`
+    : "";
 
   const status = busy
     ? `<div class="working"><div class="row"><span class="spinner"></span><b>${esc(p.running.title)}</b><span class="muted small" id="lastline"></span></div><details style="margin-top:6px"><summary class="small">Visa vad som händer</summary><div id="console" class="console" style="margin-top:6px"></div></details></div>`
@@ -632,14 +664,14 @@ async function projectPage(id) {
     <div class="stack film">
       <div class="spread">
         <div><h1>${esc(p.title)}</h1><div class="muted">${swatch(p.palette)} ${esc(p.profileName)} · ${modeName(p.mode)}${p.film?.mood ? ` · ${esc(moodLabel(p.film.mood))}` : ""} · ${esc(p.formats.join(" och "))}${p.scenes.length ? ` · ${p.scenes.length} scener · ${p.seconds} s` : ""}</div></div>
-        <div class="row">${p.preview ? `<button data-play>▶ Spela snabbversionen</button>` : ""}<button class="link danger small" data-delete-film ${busy ? "disabled" : ""}>Radera filmen</button></div>
+        <div class="row">${watch ? `<button data-play>▶ Spela ${watch.kind === "film" ? "filmen" : "snabbversionen"}</button>` : ""}<button class="link danger small" data-delete-film ${busy ? "disabled" : ""}>Radera filmen</button></div>
       </div>
       ${p.profileNewer ? `<div class="panel banner small row" style="justify-content:space-between"><span>${esc(p.profileName)}s profil har ändrats sedan den lades in i filmen.</span><button data-profile-update ${busy ? "disabled" : ""}>Visa ändringarna</button></div>` : ""}
       <div class="stepbar">${p.steps.list.map((s, i) => `<button data-view="${s.key}" class="${s.done ? "done" : ""} ${s.key === view ? "on" : ""} ${s.key === cur && !s.done ? "next" : ""}"><span class="n">${s.done ? "✓" : i + 1}</span>${esc(s.label)}</button>`).join("")}</div>
       <div class="panel stepcard">
         <div class="muted small">${view === cur && !done[view] ? "Nästa steg" : `Steg ${order.indexOf(view) + 1} · ${esc(STEP_NAMES[view])}`}</div>
         <h2 class="big">${esc(card.title)}</h2>
-        ${before.length && view !== cur ? `<p class="warn small">Gör ${list(before.map((k) => STEP_NAMES[k]))} först. <button class="link small" data-view="${cur}">Till nästa steg</button></p>` : ""}
+        ${wait}
         <p class="muted">${card.text}</p>
         ${card.facts.length ? `<div class="facts">${card.facts.map((f) => `<span>${f}</span>`).join("")}</div>` : ""}
         ${status}
