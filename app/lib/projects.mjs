@@ -127,7 +127,8 @@ function steps(s) {
     script: !s.demo && s.scenes > 0 && ok("script"),
     voice: s.scenes > 0 && s.narrated >= s.scenes,
     images: s.scenes > 0 && s.images >= s.illustrated,
-    review: s.scenesBuilt && Boolean(s.preview) && ok("review"),
+    // the finished film counts as something to look at too (made without a quick version first)
+    review: s.scenesBuilt && (Boolean(s.preview) || s.renders.length > 0) && ok("review"),
   };
   // the finished films count once everything before them is done, and only if made after the last change
   // …and every format of the film has a render made after the last change
@@ -244,6 +245,15 @@ export function summary(id) {
     preview: existsSync(preview) ? { path: path.relative(dir, preview), mtime: mtime(preview) } : null,
     modified: Math.max(statSync(path.join(dir, "film.json")).mtimeMs, ...renders.map((r) => r.mtime), existsSync(path.join(dir, "video/src/timeline/master.json")) ? statSync(path.join(dir, "video/src/timeline/master.json")).mtimeMs : 0),
   };
+  // what the user can look at that shows the film as it is now: the quick version, or the finished film
+  // in the main format, whichever is newer. Anything made before the last change shows an older film.
+  // (the user may have renamed the finished file, so it is found by its date, not its name: the newest
+  // film that is not another format's, -1x1 or -9x16)
+  const mainFilm = renders.find((r) => !/-\d+x\d+\.mp4$/.test(r.name)) || renders[0];
+  s.watch =
+    [s.preview && { ...s.preview, kind: "preview" }, mainFilm && { path: `out/${mainFilm.name}`, mtime: mainFilm.mtime, kind: "film" }]
+      .filter((x) => x && x.mtime >= s.timelineMtime)
+      .sort((x, y) => y.mtime - x.mtime)[0] || null;
   s.steps = steps(s);
   s.stage = s.steps.current === "done" ? { key: "done", label: "Klar" } : { key: s.steps.current, label: STEP_NAMES[s.steps.current] };
   return s;
